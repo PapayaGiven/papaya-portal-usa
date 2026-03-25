@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Image from 'next/image'
 import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
 import {
   adminLogout,
@@ -564,11 +565,13 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks }
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <span className="text-xl">⚙️</span>
-              <div>
-                <p className="font-dm-sans text-xs text-white/40 uppercase tracking-widest">Papaya Social Club</p>
-                <p className="font-playfair text-lg text-white leading-none">Admin Panel</p>
-              </div>
+              <Image
+                src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Long_green.png"
+                alt="Papaya Social Club"
+                width={120}
+                height={32}
+              />
+              <p className="font-playfair text-lg text-white leading-none">Admin Panel</p>
             </div>
             <div className="flex items-center gap-3">
               <a href="/" className="font-dm-sans text-sm text-white/40 hover:text-white transition px-3 py-1.5 rounded-lg hover:bg-white/5">

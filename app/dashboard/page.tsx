@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import { Creator, Task, Campaign, Product, LEVEL_CONFIG } from '@/lib/types'
 import Nav from '@/components/Nav'
 import SmartBanner from '@/components/SmartBanner'
@@ -133,7 +134,15 @@ export default async function DashboardPage() {
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Greeting row */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <Image
+            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
+            alt=""
+            width={180}
+            height={180}
+            className="absolute right-0 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none select-none"
+            aria-hidden="true"
+          />
           <div>
             <h1 className="font-playfair text-3xl text-brand-black">{greeting}</h1>
             <p className="font-dm-sans text-sm text-gray-500 mt-1">
@@ -146,7 +155,7 @@ export default async function DashboardPage() {
             </p>
           </div>
 
-          {/* Level badge */}
+          {/* Level badge - inside relative container, ensure z-index above watermark */}
           {creator && (
             <div className="flex items-center gap-2">
               <span className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">

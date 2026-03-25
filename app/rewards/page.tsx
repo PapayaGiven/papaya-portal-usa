@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import Nav from '@/components/Nav'
 import { Creator, CreatorLevel } from '@/lib/types'
 
@@ -77,11 +78,19 @@ export default async function RewardsPage() {
       <Nav />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8">
-          <h1 className="font-playfair text-4xl text-brand-black mb-2">Deine Rewards.</h1>
-          <p className="font-dm-sans text-gray-500 text-sm">
-            Was du jetzt verdienst — und worauf du dich freuen kannst.
-          </p>
+        <div className="mb-8 flex items-center gap-4">
+          <Image
+            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
+            alt="Papaya Social Club"
+            width={48}
+            height={48}
+          />
+          <div>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Deine Rewards.</h1>
+            <p className="font-dm-sans text-gray-500 text-sm">
+              Was du jetzt verdienst — und worauf du dich freuen kannst.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

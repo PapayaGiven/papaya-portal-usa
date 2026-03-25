@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -31,7 +32,12 @@ export default function Nav() {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
-            <span className="text-xl">☀️</span>
+            <Image
+              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
+              alt="Papaya Social Club"
+              width={28}
+              height={28}
+            />
             <span className="font-dm-sans font-semibold text-brand-black text-sm tracking-wide hidden sm:block">
               Papaya Social Club
             </span>
@@ -103,6 +109,15 @@ export default function Nav() {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1">
+          <div className="flex items-center gap-2 px-4 py-2 mb-1">
+            <Image
+              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
+              alt="Papaya Social Club"
+              width={20}
+              height={20}
+            />
+            <span className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest">Papaya Social Club</span>
+          </div>
           {links.map((link) => {
             const isActive = pathname === link.href
             return (

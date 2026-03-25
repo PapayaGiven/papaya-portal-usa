@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import Image from 'next/image'
 import Nav from '@/components/Nav'
 import { Creator, CreatorLevel, LEVEL_CONFIG } from '@/lib/types'
 
@@ -86,11 +87,19 @@ export default async function ProgressPage() {
       <Nav />
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8">
-          <h1 className="font-playfair text-4xl text-brand-black mb-2">Dein Weg nach oben.</h1>
-          <p className="font-dm-sans text-gray-500 text-sm">
-            Vier Level, eine Mission. Sieh, wo du stehst und was als Nächstes kommt.
-          </p>
+        <div className="mb-8 flex items-center gap-4">
+          <Image
+            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
+            alt="Papaya Social Club"
+            width={48}
+            height={48}
+          />
+          <div>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Dein Weg nach oben.</h1>
+            <p className="font-dm-sans text-gray-500 text-sm">
+              Vier Level, eine Mission. Sieh, wo du stehst und was als Nächstes kommt.
+            </p>
+          </div>
         </div>
 
         {/* Current status pill */}
