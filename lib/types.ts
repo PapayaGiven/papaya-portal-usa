@@ -21,6 +21,9 @@ export interface Product {
   conversion_rate: number | null
   is_exclusive: boolean
   niche: string | null
+  image_url: string | null
+  product_link: string | null
+  tags: string[]
   created_at: string
 }
 
@@ -45,6 +48,21 @@ export interface Campaign {
   deadline: string | null
   min_level: CreatorLevel
   status: string
+  brand_logo_url: string | null
+  product_id: string | null
+  budget: number | null
+  product_link: string | null
+  sample_available: boolean
+  created_at: string
+}
+
+export interface CampaignApplication {
+  id: string
+  campaign_id: string
+  creator_id: string
+  posts_offered: number | null
+  live_hours_offered: number | null
+  price_offered: number | null
   created_at: string
 }
 

@@ -78,9 +78,33 @@ export async function addCreator(name: string, email: string): Promise<{ error?:
   if (dbError) return { error: dbError.message }
 
   const { error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/dashboard`,
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
   })
   if (authError) return { error: `Creator erstellt, aber Einladung fehlgeschlagen: ${authError.message}` }
+
+  revalidatePath('/admin')
+  return {}
+}
+
+export async function deleteCreator(id: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: creator } = await supabase
+    .from('creators')
+    .select('email')
+    .eq('id', id)
+    .single()
+
+  const { error } = await supabase.from('creators').delete().eq('id', id)
+  if (error) return { error: error.message }
+
+  if (creator?.email) {
+    const { data: { users } } = await supabase.auth.admin.listUsers()
+    const authUser = users.find((u) => u.email === creator.email)
+    if (authUser) {
+      await supabase.auth.admin.deleteUser(authUser.id)
+    }
+  }
 
   revalidatePath('/admin')
   return {}
@@ -94,6 +118,9 @@ export async function addProduct(data: {
   conversion_rate: number
   is_exclusive: boolean
   niche: string
+  image_url: string | null
+  product_link: string | null
+  tags: string[]
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const { error } = await supabase.from('products').insert(data)
@@ -110,6 +137,9 @@ export async function updateProduct(
     conversion_rate: number
     is_exclusive: boolean
     niche: string
+    image_url: string | null
+    product_link: string | null
+    tags: string[]
   }>
 ): Promise<{ error?: string }> {
   const supabase = createAdminClient()
@@ -141,6 +171,11 @@ export async function addCampaign(data: {
   deadline: string
   min_level: CreatorLevel
   status: string
+  brand_logo_url: string | null
+  product_id: string | null
+  budget: number | null
+  product_link: string | null
+  sample_available: boolean
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const { error } = await supabase.from('campaigns').insert(data)
@@ -159,6 +194,12 @@ export async function toggleCampaignStatus(id: string, currentStatus: string): P
   const supabase = createAdminClient()
   const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
   await supabase.from('campaigns').update({ status: newStatus }).eq('id', id)
+  revalidatePath('/admin')
+}
+
+export async function deleteCampaign(id: string): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase.from('campaigns').delete().eq('id', id)
   revalidatePath('/admin')
 }
 

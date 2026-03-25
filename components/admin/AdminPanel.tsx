@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, toggleCreatorActive,
+  addCreator, updateCreatorGMV, updateCreatorLevel, toggleCreatorActive, deleteCreator,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive,
-  addCampaign, updateCampaignSpots, toggleCampaignStatus,
+  addCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   assignTask, bulkAssignTask,
 } from '@/app/admin/actions'
 
@@ -20,11 +21,22 @@ interface TodayTask {
   product: { name: string } | null
 }
 
+interface ApplicationRow {
+  id: string
+  posts_offered: number | null
+  live_hours_offered: number | null
+  price_offered: number | null
+  created_at: string
+  creator: { name: string | null; email: string } | null
+  campaign: { brand_name: string } | null
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
   campaigns: Campaign[]
   todayTasks: TodayTask[]
+  applications: ApplicationRow[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Rising', 'Pro', 'Elite']
@@ -33,6 +45,18 @@ const LEVEL_COLORS: Record<CreatorLevel, string> = {
   Rising: 'bg-pink-100 text-pink-700',
   Pro: 'bg-emerald-100 text-emerald-700',
   Elite: 'bg-amber-100 text-amber-700',
+}
+
+const DEFAULT_TAGS = ['viral', 'evergreen', 'seasonal', 'trending', 'new']
+const TAG_PALETTE: Record<string, string> = {
+  viral: 'bg-orange-100 text-orange-700',
+  evergreen: 'bg-emerald-100 text-emerald-700',
+  seasonal: 'bg-blue-100 text-blue-700',
+  trending: 'bg-purple-100 text-purple-700',
+  new: 'bg-pink-100 text-pink-700',
+}
+function tagColor(tag: string): string {
+  return TAG_PALETTE[tag] ?? 'bg-gray-100 text-gray-600'
 }
 
 function Feedback({ msg }: { msg: string | null }) {
@@ -175,16 +199,33 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    disabled={isPending}
-                    onClick={() => startTransition(async () => {
-                      await toggleCreatorActive(c.id, !c.is_active)
-                      fb(`✓ Creator ${c.is_active ? 'deaktiviert' : 'aktiviert'}`)
-                    })}
-                    className="text-xs text-gray-500 hover:text-brand-green transition px-2 py-1 rounded-lg hover:bg-gray-100"
-                  >
-                    {c.is_active ? 'Deaktivieren' : 'Aktivieren'}
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      disabled={isPending}
+                      onClick={() => startTransition(async () => {
+                        await toggleCreatorActive(c.id, !c.is_active)
+                        fb(`✓ Creator ${c.is_active ? 'deaktiviert' : 'aktiviert'}`)
+                      })}
+                      className="text-xs text-gray-500 hover:text-brand-green transition px-2 py-1 rounded-lg hover:bg-gray-100"
+                    >
+                      {c.is_active ? 'Deaktivieren' : 'Aktivieren'}
+                    </button>
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        if (confirm(`"${c.name || c.email}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+                          startTransition(async () => {
+                            const r = await deleteCreator(c.id)
+                            if (r.error) fb(`Fehler: ${r.error}`)
+                            else fb('✓ Creator gelöscht')
+                          })
+                        }
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
+                    >
+                      Löschen
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -199,12 +240,32 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
 function ProductsTab({ products }: { products: Product[] }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false })
-  const [editForm, setEditForm] = useState<Partial<{ name: string; commission_rate: number; conversion_rate: number; niche: string; is_exclusive: boolean }>>({})
+  const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_TAGS)
+  const [newTag, setNewTag] = useState('')
+  const [form, setForm] = useState({
+    name: '', commission_rate: '', conversion_rate: '', niche: '',
+    is_exclusive: false, image_url: '', product_link: '', tags: [] as string[],
+  })
+  const [editForm, setEditForm] = useState<Partial<{
+    name: string; commission_rate: number; conversion_rate: number
+    niche: string; is_exclusive: boolean; image_url: string | null; product_link: string | null; tags: string[]
+  }>>({})
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  function toggleTag(tag: string, current: string[], setter: (tags: string[]) => void) {
+    setter(current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag])
+  }
+
+  function addCustomTag() {
+    const t = newTag.trim().toLowerCase()
+    if (t && !availableTags.includes(t)) {
+      setAvailableTags((prev) => [...prev, t])
+      setNewTag('')
+    }
+  }
 
   return (
     <div>
@@ -215,6 +276,41 @@ function ProductsTab({ products }: { products: Product[] }) {
         </button>
       </div>
 
+      {/* Manage Tags */}
+      <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 mb-5">
+        <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-2">Tags verwalten</h3>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {availableTags.map((tag) => (
+            <span key={tag} className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${tagColor(tag)}`}>
+              {tag}
+              {!DEFAULT_TAGS.includes(tag) && (
+                <button
+                  onClick={() => setAvailableTags((t) => t.filter((x) => x !== tag))}
+                  className="opacity-60 hover:opacity-100 ml-0.5 leading-none"
+                  aria-label={`${tag} entfernen`}
+                >×</button>
+              )}
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            placeholder="Neuen Tag hinzufügen…"
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
+            className="input-field flex-1 max-w-xs"
+          />
+          <button
+            onClick={addCustomTag}
+            className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-4 py-2 rounded-xl hover:bg-brand-black/80 transition"
+          >
+            + Hinzufügen
+          </button>
+        </div>
+      </div>
+
       {showAdd && (
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
           <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">Neues Produkt</h3>
@@ -223,19 +319,55 @@ function ProductsTab({ products }: { products: Product[] }) {
             <input placeholder="Provision %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
             <input placeholder="Conversion %" type="number" value={form.conversion_rate} onChange={(e) => setForm((f) => ({ ...f, conversion_rate: e.target.value }))} className="input-field" />
             <input placeholder="Nische (z.B. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
-            <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700 col-span-1">
+            <input placeholder="Bild-URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
+            <input placeholder="Produkt-Link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
               <input type="checkbox" checked={form.is_exclusive} onChange={(e) => setForm((f) => ({ ...f, is_exclusive: e.target.checked }))} className="rounded" />
               Exklusiv
             </label>
           </div>
+          {form.image_url && (
+            <div className="mt-3">
+              <p className="font-dm-sans text-xs text-gray-400 mb-1">Vorschau:</p>
+              <img src={form.image_url} alt="Vorschau" className="w-16 h-16 object-cover rounded-lg border border-gray-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            </div>
+          )}
+          <div className="mt-3">
+            <p className="font-dm-sans text-xs font-medium text-gray-600 mb-2">Tags:</p>
+            <div className="flex flex-wrap gap-2">
+              {availableTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag, form.tags, (tags) => setForm((f) => ({ ...f, tags })))}
+                  className={`text-xs font-medium px-2.5 py-1 rounded-full border transition ${form.tags.includes(tag) ? `${tagColor(tag)} border-current` : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             disabled={isPending || !form.name}
             onClick={() => startTransition(async () => {
-              const r = await addProduct({ name: form.name, commission_rate: parseFloat(form.commission_rate) || 0, conversion_rate: parseFloat(form.conversion_rate) || 0, is_exclusive: form.is_exclusive, niche: form.niche })
+              const r = await addProduct({
+                name: form.name,
+                commission_rate: parseFloat(form.commission_rate) || 0,
+                conversion_rate: parseFloat(form.conversion_rate) || 0,
+                is_exclusive: form.is_exclusive,
+                niche: form.niche,
+                image_url: form.image_url || null,
+                product_link: form.product_link || null,
+                tags: form.tags,
+              })
               if (r.error) fb(`Fehler: ${r.error}`)
-              else { fb('✓ Produkt hinzugefügt'); setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false }); setShowAdd(false) }
+              else {
+                fb('✓ Produkt hinzugefügt')
+                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', tags: [] })
+                setShowAdd(false)
+              }
             })}
-            className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+            className="mt-4 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
             {isPending ? 'Speichern...' : 'Speichern'}
           </button>
@@ -248,26 +380,45 @@ function ProductsTab({ products }: { products: Product[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Name', 'Provision', 'Conversion', 'Nische', 'Exklusiv', 'Aktionen'].map((h) => (
+              {['Bild', 'Name', 'Provision', 'Conversion', 'Nische', 'Tags', 'Exklusiv', 'Aktionen'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {products.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Keine Produkte vorhanden.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Keine Produkte vorhanden.</td></tr>
             )}
             {products.map((p) => (
               <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3">
+                  {p.image_url
+                    ? <img src={p.image_url} alt={p.name} className="w-10 h-10 object-cover rounded-lg border border-gray-100" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    : <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-gray-300 text-xs">–</div>
+                  }
+                </td>
                 <td className="px-4 py-3 font-medium text-brand-black">
                   {editingId === p.id
                     ? <input defaultValue={p.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="input-field w-36" />
-                    : p.name}
+                    : <div>
+                        <p>{p.name}</p>
+                        {p.product_link && (
+                          <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline">Link →</a>
+                        )}
+                      </div>
+                  }
                 </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{p.commission_rate}%</td>
                 <td className="px-4 py-3 text-gray-600">{p.conversion_rate}%</td>
                 <td className="px-4 py-3">
                   {p.niche && <span className="bg-brand-light-pink text-brand-green text-xs font-medium px-2 py-0.5 rounded-full">{p.niche}</span>}
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap gap-1">
+                    {(p.tags ?? []).map((tag) => (
+                      <span key={tag} className={`text-xs font-medium px-2 py-0.5 rounded-full ${tagColor(tag)}`}>{tag}</span>
+                    ))}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <button
@@ -314,10 +465,14 @@ function ProductsTab({ products }: { products: Product[] }) {
 }
 
 // ── Campaigns Tab ─────────────────────────────────────────────────────────────
-function CampaignsTab({ campaigns }: { campaigns: Campaign[] }) {
+function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products: Product[] }) {
   const [showAdd, setShowAdd] = useState(false)
   const [editingSpots, setEditingSpots] = useState<{ id: string; value: string } | null>(null)
-  const [form, setForm] = useState({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation' as CreatorLevel, status: 'active' })
+  const [form, setForm] = useState({
+    brand_name: '', description: '', commission_rate: '', spots_left: '',
+    deadline: '', min_level: 'Initiation' as CreatorLevel, status: 'active',
+    brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false,
+  })
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -344,13 +499,47 @@ function CampaignsTab({ campaigns }: { campaigns: Campaign[] }) {
             <select value={form.min_level} onChange={(e) => setForm((f) => ({ ...f, min_level: e.target.value as CreatorLevel }))} className="input-field">
               {LEVELS.map((l) => <option key={l} value={l}>ab {l}</option>)}
             </select>
+            <input placeholder="Brand Logo URL" value={form.brand_logo_url} onChange={(e) => setForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field" />
+            <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
+              <option value="">Produkt verknüpfen (optional)</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <input placeholder="Budget (€)" type="number" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} className="input-field" />
+            <input placeholder="Produkt-Link (Showcase)" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700 sm:col-span-2">
+              <input type="checkbox" checked={form.sample_available} onChange={(e) => setForm((f) => ({ ...f, sample_available: e.target.checked }))} className="rounded" />
+              Sample verfügbar
+            </label>
           </div>
+          {form.brand_logo_url && (
+            <div className="mt-3">
+              <p className="font-dm-sans text-xs text-gray-400 mb-1">Logo-Vorschau:</p>
+              <img src={form.brand_logo_url} alt="Logo" className="h-10 object-contain rounded border border-gray-200 bg-white px-2 py-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+            </div>
+          )}
           <button
             disabled={isPending || !form.brand_name}
             onClick={() => startTransition(async () => {
-              const r = await addCampaign({ brand_name: form.brand_name, description: form.description, commission_rate: parseFloat(form.commission_rate) || 0, spots_left: parseInt(form.spots_left) || 0, deadline: form.deadline, min_level: form.min_level, status: 'active' })
+              const r = await addCampaign({
+                brand_name: form.brand_name,
+                description: form.description,
+                commission_rate: parseFloat(form.commission_rate) || 0,
+                spots_left: parseInt(form.spots_left) || 0,
+                deadline: form.deadline,
+                min_level: form.min_level,
+                status: 'active',
+                brand_logo_url: form.brand_logo_url || null,
+                product_id: form.product_id || null,
+                budget: parseFloat(form.budget) || null,
+                product_link: form.product_link || null,
+                sample_available: form.sample_available,
+              })
               if (r.error) fb(`Fehler: ${r.error}`)
-              else { fb('✓ Kampagne erstellt'); setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', status: 'active' }); setShowAdd(false) }
+              else {
+                fb('✓ Kampagne erstellt')
+                setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', status: 'active', brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false })
+                setShowAdd(false)
+              }
             })}
             className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
@@ -365,18 +554,26 @@ function CampaignsTab({ campaigns }: { campaigns: Campaign[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Marke', 'Provision', 'Plätze', 'Deadline', 'Min. Level', 'Status', 'Aktionen'].map((h) => (
+              {['Logo', 'Marke', 'Provision', 'Plätze', 'Budget', 'Deadline', 'Min. Level', 'Status', 'Aktionen'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {campaigns.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Keine Kampagnen vorhanden.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Keine Kampagnen vorhanden.</td></tr>
             )}
             {campaigns.map((c) => (
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">{c.brand_name}</td>
+                <td className="px-4 py-3">
+                  {c.brand_logo_url
+                    ? <img src={c.brand_logo_url} alt={c.brand_name} className="h-8 w-12 object-contain rounded border border-gray-100 bg-white p-0.5" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    : <div className="h-8 w-12 rounded bg-gray-100 flex items-center justify-center text-gray-300 text-xs">–</div>
+                  }
+                </td>
+                <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">
+                  <Link href={`/campaigns/${c.id}`} className="hover:text-brand-green hover:underline">{c.brand_name}</Link>
+                </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{c.commission_rate}%</td>
                 <td className="px-4 py-3">
                   {editingSpots?.id === c.id ? (
@@ -391,6 +588,9 @@ function CampaignsTab({ campaigns }: { campaigns: Campaign[] }) {
                     </button>
                   )}
                 </td>
+                <td className="px-4 py-3 text-gray-600">
+                  {c.budget ? `€${c.budget.toLocaleString('de-DE')}` : '–'}
+                </td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                   {c.deadline ? new Date(c.deadline).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}
                 </td>
@@ -400,18 +600,36 @@ function CampaignsTab({ campaigns }: { campaigns: Campaign[] }) {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
-                    {c.status === 'active' ? 'Aktiv' : 'Inaktiv'}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                      {c.status === 'active' ? 'Aktiv' : 'Inaktiv'}
+                    </span>
+                    {c.sample_available && (
+                      <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Sample</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    disabled={isPending}
-                    onClick={() => startTransition(async () => { await toggleCampaignStatus(c.id, c.status); fb(`✓ Kampagne ${c.status === 'active' ? 'deaktiviert' : 'aktiviert'}`) })}
-                    className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition"
-                  >
-                    {c.status === 'active' ? 'Deaktivieren' : 'Aktivieren'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={isPending}
+                      onClick={() => startTransition(async () => { await toggleCampaignStatus(c.id, c.status); fb(`✓ Kampagne ${c.status === 'active' ? 'deaktiviert' : 'aktiviert'}`) })}
+                      className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      {c.status === 'active' ? 'Deaktivieren' : 'Aktivieren'}
+                    </button>
+                    <button
+                      disabled={isPending}
+                      onClick={() => {
+                        if (confirm(`Kampagne "${c.brand_name}" wirklich löschen?`)) {
+                          startTransition(async () => { await deleteCampaign(c.id); fb('✓ Kampagne gelöscht') })
+                        }
+                      }}
+                      className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
+                    >
+                      Löschen
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -433,7 +651,6 @@ function TasksTab({ creators, products, todayTasks }: { creators: Creator[]; pro
 
   return (
     <div className="space-y-8">
-      {/* Assign to individual */}
       <div>
         <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">Aufgabe zuweisen</h2>
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5">
@@ -468,7 +685,6 @@ function TasksTab({ creators, products, todayTasks }: { creators: Creator[]; pro
         </div>
       </div>
 
-      {/* Bulk assign */}
       <div>
         <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">Bulk-Zuweisung nach Level</h2>
         <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5">
@@ -502,7 +718,6 @@ function TasksTab({ creators, products, todayTasks }: { creators: Creator[]; pro
 
       <Feedback msg={feedback} />
 
-      {/* Today's task overview */}
       <div>
         <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">
           Heutige Aufgaben{' '}
@@ -544,10 +759,68 @@ function TasksTab({ creators, products, todayTasks }: { creators: Creator[]; pro
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'tasks'
+// ── Applications Tab ──────────────────────────────────────────────────────────
+function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Kampagnen-Bewerbungen</h2>
+        <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+          {applications.length} gesamt
+        </span>
+      </div>
 
-export default function AdminPanel({ creators, products, campaigns, todayTasks }: AdminPanelProps) {
+      <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <table className="w-full text-sm font-dm-sans">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              {['Creator', 'Kampagne', 'Posts', 'Live-Stunden', 'Angebot (€)', 'Datum'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {applications.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Noch keine Bewerbungen.</td></tr>
+            )}
+            {applications.map((a) => (
+              <tr key={a.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">
+                  {a.creator?.name || a.creator?.email || '–'}
+                  {a.creator?.email && a.creator?.name && (
+                    <p className="text-xs text-gray-400 font-normal">{a.creator.email}</p>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                  {a.campaign?.brand_name || '–'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-semibold text-brand-black">{a.posts_offered ?? '–'}</span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="font-semibold text-brand-black">{a.live_hours_offered ?? '–'}h</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-bold text-brand-green">
+                    {a.price_offered != null ? `€${Number(a.price_offered).toLocaleString('de-DE')}` : '–'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  {new Date(a.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'tasks' | 'applications'
+
+export default function AdminPanel({ creators, products, campaigns, todayTasks, applications }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -556,6 +829,7 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks }
     { id: 'products', label: 'Produkte', count: products.length },
     { id: 'campaigns', label: 'Kampagnen', count: campaigns.length },
     { id: 'tasks', label: 'Aufgaben', count: todayTasks.length },
+    { id: 'applications', label: 'Bewerbungen', count: applications.length },
   ]
 
   return (
@@ -620,8 +894,9 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks }
         <div className="bg-white rounded-2xl p-6 shadow-sm">
           {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} />}
           {activeTab === 'products' && <ProductsTab products={products} />}
-          {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} />}
+          {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
           {activeTab === 'tasks' && <TasksTab creators={creators} products={products} todayTasks={todayTasks} />}
+          {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
         </div>
       </div>
     </div>

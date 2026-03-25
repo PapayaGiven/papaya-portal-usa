@@ -16,7 +16,7 @@ export default async function AdminPage() {
   const supabase = createAdminClient()
   const today = new Date().toISOString().split('T')[0]
 
-  const [creatorsRes, productsRes, campaignsRes, todayTasksRes] = await Promise.all([
+  const [creatorsRes, productsRes, campaignsRes, todayTasksRes, applicationsRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -34,6 +34,10 @@ export default async function AdminPage() {
       .select('*, creator:creators(name, email), product:products(name)')
       .eq('date', today)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('campaign_applications')
+      .select('*, creator:creators(name, email), campaign:campaigns(brand_name)')
+      .order('created_at', { ascending: false }),
   ])
 
   return (
@@ -42,6 +46,7 @@ export default async function AdminPage() {
       products={productsRes.data ?? []}
       campaigns={campaignsRes.data ?? []}
       todayTasks={todayTasksRes.data ?? []}
+      applications={applicationsRes.data ?? []}
     />
   )
 }
