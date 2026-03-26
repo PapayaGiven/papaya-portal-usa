@@ -16,10 +16,10 @@ const REWARDS: Record<CreatorLevel, { color: string; gmvRange: string; emoji: st
     gmvRange: '€0 – €299',
     emoji: '🌱',
     rewards: [
-      { emoji: '📦', title: 'Willkommenspaket', description: 'Dein Papaya-Starterkit mit allem, was du brauchst.' },
-      { emoji: '💬', title: 'Community Discord', description: 'Zugang zur exklusiven Creator-Community.' },
-      { emoji: '📊', title: 'Creator Dashboard', description: 'Dein persönliches Dashboard zur Fortschritts-Analyse.' },
-      { emoji: '📩', title: 'Wöchentlicher Newsletter', description: 'Tipps, Trends und neue Produktinfos direkt ins Postfach.' },
+      { emoji: '📦', title: 'Welcome package', description: 'Your Papaya starter kit with everything you need.' },
+      { emoji: '💬', title: 'Community access', description: 'Access to the exclusive creator community.' },
+      { emoji: '📊', title: 'Creator dashboard', description: 'Your personal dashboard for tracking progress.' },
+      { emoji: '📩', title: 'Weekly newsletter', description: 'Tips, trends and new product info straight to your inbox.' },
     ],
   },
   Rising: {
@@ -27,32 +27,32 @@ const REWARDS: Record<CreatorLevel, { color: string; gmvRange: string; emoji: st
     gmvRange: '€300 – €999',
     emoji: '🌸',
     rewards: [
-      { emoji: '🎁', title: 'Papaya Creator Kit', description: 'Exklusives Brand-Kit: Aufkleber, Notizbuch, Tote Bag.' },
-      { emoji: '💰', title: 'Monatlicher €25 Bonus', description: '€25 extra auf deinen Auszahlungen jeden Monat.' },
-      { emoji: '📢', title: 'Brand-Deal Erstbenachrichtigung', description: 'Du erfährst als Erste von neuen Kampagnen.' },
-      { emoji: '🏅', title: '€300 GMV Badge', description: 'Offizielles Rising-Badge für dein Profil.' },
+      { emoji: '🎁', title: 'Papaya Creator Kit', description: 'Exclusive brand kit: stickers, notebook, tote bag.' },
+      { emoji: '💰', title: 'Monthly €25 bonus', description: '€25 extra on your payouts every month.' },
+      { emoji: '📢', title: 'Brand deal first notification', description: 'Be the first to hear about new campaigns.' },
+      { emoji: '🏅', title: '€300 GMV badge', description: 'Official Rising badge for your profile.' },
     ],
   },
   Pro: {
     color: '#1B5E3B',
-    gmvRange: '€1.000 – €4.999',
+    gmvRange: '€1,000 – €4,999',
     emoji: '💚',
     rewards: [
-      { emoji: '💸', title: 'Vierteljährlicher €100 Bonus', description: '€100 Bonus alle drei Monate on top.' },
-      { emoji: '📸', title: 'Foto & Video Shooting', description: 'Professionelles Content-Shooting mit Papaya-Team.' },
-      { emoji: '🌐', title: 'Agency Portfolio Feature', description: 'Du wirst auf der Papaya-Website als Creator vorgestellt.' },
-      { emoji: '📞', title: '1:1 Strategie-Calls', description: 'Monatliche Strategy-Session mit deinem Dedicated Manager.' },
+      { emoji: '💸', title: 'Quarterly €100 bonus', description: '€100 bonus every three months on top.' },
+      { emoji: '📸', title: 'Photo & video shoot', description: 'Professional content shoot with the Papaya team.' },
+      { emoji: '🌐', title: 'Agency portfolio feature', description: 'You are featured on the Papaya website as a creator.' },
+      { emoji: '📞', title: '1:1 strategy calls', description: 'Monthly strategy session with your dedicated manager.' },
     ],
   },
   Elite: {
     color: '#F59E0B',
-    gmvRange: '€5.000+',
+    gmvRange: '€5,000+',
     emoji: '👑',
     rewards: [
-      { emoji: '💎', title: 'Vierteljährlicher €500 Bonus', description: '€500 extra alle drei Monate als Top-Creator.' },
-      { emoji: '🤝', title: 'Agency-Partnerschaft', description: 'Offizieller Papaya-Partnervertrag mit exklusiven Konditionen.' },
-      { emoji: '✈️', title: 'Event-Einladungen & Reisen', description: 'Einladungen zu Brand-Events, Messen und Creator-Retreats.' },
-      { emoji: '🔧', title: 'Co-Branded Deals', description: 'Kampagnen, die speziell um dich als Creator gebaut werden.' },
+      { emoji: '💎', title: 'Quarterly €500 bonus', description: '€500 extra every three months as a top creator.' },
+      { emoji: '🤝', title: 'Agency partnership', description: 'Official Papaya partner contract with exclusive terms.' },
+      { emoji: '✈️', title: 'Event invitations & travel', description: 'Invitations to brand events, trade shows and creator retreats.' },
+      { emoji: '🔧', title: 'Co-branded deals', description: 'Campaigns built specifically around you as a creator.' },
     ],
   },
 }
@@ -86,9 +86,9 @@ export default async function RewardsPage() {
             height={48}
           />
           <div>
-            <h1 className="font-playfair text-4xl text-brand-black mb-1">Deine Rewards.</h1>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Your Rewards.</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Was du jetzt verdienst — und worauf du dich freuen kannst.
+              What you earn now — and what you can look forward to.
             </p>
           </div>
         </div>
@@ -104,14 +104,9 @@ export default async function RewardsPage() {
               <div
                 key={level}
                 className={`bg-white rounded-2xl border overflow-hidden transition-all ${
-                  isCurrent
-                    ? 'border-brand-pink shadow-md'
-                    : isPast
-                    ? 'border-gray-100'
-                    : 'border-gray-100 opacity-45'
+                  isCurrent ? 'border-brand-pink shadow-md' : isPast ? 'border-gray-100' : 'border-gray-100 opacity-45'
                 }`}
               >
-                {/* Header */}
                 <div
                   className="px-6 py-4 flex items-center justify-between"
                   style={{
@@ -122,59 +117,41 @@ export default async function RewardsPage() {
                   <div className="flex items-center gap-2.5">
                     <span className="text-2xl">{config.emoji}</span>
                     <div>
-                      <h2 className="font-playfair text-xl text-brand-black leading-none">
-                        {level}
-                      </h2>
+                      <h2 className="font-playfair text-xl text-brand-black leading-none">{level}</h2>
                       <p className="font-dm-sans text-xs text-gray-400 mt-0.5">{config.gmvRange}</p>
                     </div>
                   </div>
                   <div>
                     {isCurrent && (
-                      <span
-                        className="font-dm-sans text-xs font-bold px-2.5 py-1 rounded-full text-white"
-                        style={{ backgroundColor: config.color }}
-                      >
-                        Aktuell
+                      <span className="font-dm-sans text-xs font-bold px-2.5 py-1 rounded-full text-white" style={{ backgroundColor: config.color }}>
+                        Current
                       </span>
                     )}
                     {isPast && (
                       <span className="font-dm-sans text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                        ✓ Freigeschaltet
+                        ✓ Unlocked
                       </span>
                     )}
                     {isFuture && (
                       <span className="font-dm-sans text-xs font-medium text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full">
-                        🔒 Gesperrt
+                        🔒 Locked
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Rewards list */}
                 <div className="p-5 space-y-3">
                   {config.rewards.map((reward, i) => (
                     <div
                       key={i}
-                      className={`flex items-start gap-3 p-3 rounded-xl ${
-                        isFuture ? 'bg-gray-50/50' : 'bg-gray-50'
-                      }`}
+                      className={`flex items-start gap-3 p-3 rounded-xl ${isFuture ? 'bg-gray-50/50' : 'bg-gray-50'}`}
                     >
-                      <span className={`text-xl shrink-0 ${isFuture ? 'grayscale opacity-40' : ''}`}>
-                        {reward.emoji}
-                      </span>
+                      <span className={`text-xl shrink-0 ${isFuture ? 'grayscale opacity-40' : ''}`}>{reward.emoji}</span>
                       <div>
-                        <p
-                          className={`font-dm-sans text-sm font-semibold ${
-                            isFuture ? 'text-gray-400' : 'text-brand-black'
-                          }`}
-                        >
+                        <p className={`font-dm-sans text-sm font-semibold ${isFuture ? 'text-gray-400' : 'text-brand-black'}`}>
                           {reward.title}
                         </p>
-                        <p
-                          className={`font-dm-sans text-xs mt-0.5 ${
-                            isFuture ? 'text-gray-300' : 'text-gray-500'
-                          }`}
-                        >
+                        <p className={`font-dm-sans text-xs mt-0.5 ${isFuture ? 'text-gray-300' : 'text-gray-500'}`}>
                           {reward.description}
                         </p>
                       </div>

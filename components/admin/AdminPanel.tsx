@@ -7,20 +7,11 @@ import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, toggleCreatorActive, deleteCreator,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive,
   addCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
-  assignTask, bulkAssignTask,
+  updateProductRequestStatus,
 } from '@/app/admin/actions'
-
-interface TodayTask {
-  id: string
-  task_name: string | null
-  is_hero: boolean
-  completed: boolean
-  creator: { name: string | null; email: string } | null
-  product: { name: string } | null
-}
 
 interface ApplicationRow {
   id: string
@@ -32,12 +23,22 @@ interface ApplicationRow {
   campaign: { brand_name: string } | null
 }
 
+interface ProductRequestRow {
+  id: string
+  product_name: string
+  brand_name: string
+  reason: string | null
+  status: string
+  created_at: string
+  creator: { name: string | null; email: string } | null
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
   campaigns: Campaign[]
-  todayTasks: TodayTask[]
   applications: ApplicationRow[]
+  productRequests: ProductRequestRow[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Rising', 'Pro', 'Elite']
@@ -62,7 +63,7 @@ function tagColor(tag: string): string {
 
 function Feedback({ msg }: { msg: string | null }) {
   if (!msg) return null
-  const isError = msg.startsWith('Fehler')
+  const isError = msg.startsWith('Error')
   return (
     <p className={`text-sm font-dm-sans mt-2 px-3 py-2 rounded-lg ${isError ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
       {msg}
@@ -74,6 +75,7 @@ function Feedback({ msg }: { msg: string | null }) {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CreatorsTab({ creators, products: _products }: { creators: Creator[]; products: Product[] }) {
   const [editingGMV, setEditingGMV] = useState<{ id: string; value: string } | null>(null)
+  const [editingGoal, setEditingGoal] = useState<{ id: string; value: string } | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -92,13 +94,13 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
           onClick={() => setShowAdd(!showAdd)}
           className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition"
         >
-          {showAdd ? 'Abbrechen' : '+ Creator einladen'}
+          {showAdd ? 'Cancel' : '+ Invite creator'}
         </button>
       </div>
 
       {showAdd && (
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
-          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Neuen Creator einladen</h3>
+          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Invite new creator</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               type="text"
@@ -109,7 +111,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
             />
             <input
               type="email"
-              placeholder="E-Mail"
+              placeholder="Email"
               value={addForm.email}
               onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
               className="input-field"
@@ -119,12 +121,12 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
             disabled={isPending || !addForm.email}
             onClick={() => startTransition(async () => {
               const r = await addCreator(addForm.name, addForm.email)
-              if (r.error) fb(`Fehler: ${r.error}`)
-              else { fb('✓ Creator eingeladen!'); setAddForm({ name: '', email: '' }); setShowAdd(false) }
+              if (r.error) fb(`Error: ${r.error}`)
+              else { fb('✓ Creator invited!'); setAddForm({ name: '', email: '' }); setShowAdd(false) }
             })}
             className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
-            {isPending ? 'Einladen...' : 'Einladung senden'}
+            {isPending ? 'Sending...' : 'Send invitation'}
           </button>
         </div>
       )}
@@ -135,14 +137,14 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Name', 'E-Mail', 'Level', 'GMV', 'Streak', 'Status', 'Aktionen'].map((h) => (
+              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Status', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {creators.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Keine Creator vorhanden.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
             )}
             {creators.map((c) => (
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -154,7 +156,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                     disabled={isPending}
                     onChange={(e) => startTransition(async () => {
                       await updateCreatorLevel(c.id, e.target.value as CreatorLevel)
-                      fb('✓ Level aktualisiert')
+                      fb('✓ Level updated')
                     })}
                     className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer ${LEVEL_COLORS[c.level]}`}
                   >
@@ -175,8 +177,8 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       <button
                         onClick={() => startTransition(async () => {
                           const r = await updateCreatorGMV(c.id, parseFloat(editingGMV.value))
-                          if (r.error) fb(`Fehler: ${r.error}`)
-                          else fb('✓ GMV gespeichert')
+                          if (r.error) fb(`Error: ${r.error}`)
+                          else fb('✓ GMV saved')
                           setEditingGMV(null)
                         })}
                         className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
@@ -188,15 +190,45 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       onClick={() => setEditingGMV({ id: c.id, value: String(c.gmv) })}
                       className="font-semibold text-brand-green hover:underline"
                     >
-                      €{c.gmv.toLocaleString('de-DE')}
+                      €{c.gmv.toLocaleString('en-DE')}
                     </button>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-500">{c.streak > 0 ? `🔥 ${c.streak}` : '–'}</td>
+                <td className="px-4 py-3">
+                  {editingGoal?.id === c.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-400">€</span>
+                      <input
+                        type="number"
+                        value={editingGoal.value}
+                        onChange={(e) => setEditingGoal({ id: c.id, value: e.target.value })}
+                        className="w-20 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-pink"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => startTransition(async () => {
+                          const r = await updateCreatorPersonalGoal(c.id, parseFloat(editingGoal.value) || 0)
+                          if (r.error) fb(`Error: ${r.error}`)
+                          else fb('✓ Personal goal saved')
+                          setEditingGoal(null)
+                        })}
+                        className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
+                      >✓</button>
+                      <button onClick={() => setEditingGoal(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setEditingGoal({ id: c.id, value: String(c.personal_gmv_goal ?? 0) })}
+                      className="text-brand-black hover:underline hover:text-brand-green"
+                    >
+                      {c.personal_gmv_goal > 0 ? `€${Number(c.personal_gmv_goal).toLocaleString('en-DE')}` : <span className="text-gray-400 text-xs">Set goal</span>}
+                    </button>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${c.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                    {c.is_active ? 'Aktiv' : 'Inaktiv'}
+                    {c.is_active ? 'Active' : 'Inactive'}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -205,26 +237,26 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       disabled={isPending}
                       onClick={() => startTransition(async () => {
                         await toggleCreatorActive(c.id, !c.is_active)
-                        fb(`✓ Creator ${c.is_active ? 'deaktiviert' : 'aktiviert'}`)
+                        fb(`✓ Creator ${c.is_active ? 'deactivated' : 'activated'}`)
                       })}
                       className="text-xs text-gray-500 hover:text-brand-green transition px-2 py-1 rounded-lg hover:bg-gray-100"
                     >
-                      {c.is_active ? 'Deaktivieren' : 'Aktivieren'}
+                      {c.is_active ? 'Deactivate' : 'Activate'}
                     </button>
                     <button
                       disabled={isPending}
                       onClick={() => {
-                        if (confirm(`"${c.name || c.email}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.`)) {
+                        if (confirm(`Delete "${c.name || c.email}"? This cannot be undone.`)) {
                           startTransition(async () => {
                             const r = await deleteCreator(c.id)
-                            if (r.error) fb(`Fehler: ${r.error}`)
-                            else fb('✓ Creator gelöscht')
+                            if (r.error) fb(`Error: ${r.error}`)
+                            else fb('✓ Creator deleted')
                           })
                         }
                       }}
                       className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
                     >
-                      Löschen
+                      Delete
                     </button>
                   </div>
                 </td>
@@ -271,15 +303,15 @@ function ProductsTab({ products }: { products: Product[] }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Produkte</h2>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Products</h2>
         <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
-          {showAdd ? 'Abbrechen' : '+ Produkt hinzufügen'}
+          {showAdd ? 'Cancel' : '+ Add product'}
         </button>
       </div>
 
       {/* Manage Tags */}
       <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 mb-5">
-        <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-2">Tags verwalten</h3>
+        <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-2">Manage tags</h3>
         <div className="flex flex-wrap gap-2 mb-3">
           {availableTags.map((tag) => (
             <span key={tag} className={`inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full ${tagColor(tag)}`}>
@@ -288,7 +320,7 @@ function ProductsTab({ products }: { products: Product[] }) {
                 <button
                   onClick={() => setAvailableTags((t) => t.filter((x) => x !== tag))}
                   className="opacity-60 hover:opacity-100 ml-0.5 leading-none"
-                  aria-label={`${tag} entfernen`}
+                  aria-label={`Remove ${tag}`}
                 >×</button>
               )}
             </span>
@@ -297,7 +329,7 @@ function ProductsTab({ products }: { products: Product[] }) {
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Neuen Tag hinzufügen…"
+            placeholder="Add new tag…"
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomTag() } }}
@@ -307,30 +339,30 @@ function ProductsTab({ products }: { products: Product[] }) {
             onClick={addCustomTag}
             className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-4 py-2 rounded-xl hover:bg-brand-black/80 transition"
           >
-            + Hinzufügen
+            + Add
           </button>
         </div>
       </div>
 
       {showAdd && (
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
-          <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">Neues Produkt</h3>
+          <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">New product</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="input-field col-span-2 sm:col-span-1" />
-            <input placeholder="Provision %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
+            <input placeholder="Commission %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
             <input placeholder="Conversion %" type="number" value={form.conversion_rate} onChange={(e) => setForm((f) => ({ ...f, conversion_rate: e.target.value }))} className="input-field" />
-            <input placeholder="Nische (z.B. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
-            <input placeholder="Bild-URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
-            <input placeholder="Produkt-Link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <input placeholder="Niche (e.g. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
+            <input placeholder="Image URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
+            <input placeholder="Product link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
               <input type="checkbox" checked={form.is_exclusive} onChange={(e) => setForm((f) => ({ ...f, is_exclusive: e.target.checked }))} className="rounded" />
-              Exklusiv
+              Exclusive
             </label>
           </div>
           {form.image_url && (
             <div className="mt-3">
-              <p className="font-dm-sans text-xs text-gray-400 mb-1">Vorschau:</p>
-              <img src={form.image_url} alt="Vorschau" className="w-16 h-16 object-cover rounded-lg border border-gray-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+              <p className="font-dm-sans text-xs text-gray-400 mb-1">Preview:</p>
+              <img src={form.image_url} alt="Preview" className="w-16 h-16 object-cover rounded-lg border border-gray-200" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
             </div>
           )}
           <div className="mt-3">
@@ -361,16 +393,16 @@ function ProductsTab({ products }: { products: Product[] }) {
                 product_link: form.product_link || null,
                 tags: form.tags,
               })
-              if (r.error) fb(`Fehler: ${r.error}`)
+              if (r.error) fb(`Error: ${r.error}`)
               else {
-                fb('✓ Produkt hinzugefügt')
+                fb('✓ Product added')
                 setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', tags: [] })
                 setShowAdd(false)
               }
             })}
             className="mt-4 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
-            {isPending ? 'Speichern...' : 'Speichern'}
+            {isPending ? 'Saving...' : 'Save'}
           </button>
         </div>
       )}
@@ -381,14 +413,14 @@ function ProductsTab({ products }: { products: Product[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Bild', 'Name', 'Provision', 'Conversion', 'Nische', 'Tags', 'Exklusiv', 'Aktionen'].map((h) => (
+              {['Image', 'Name', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {products.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">Keine Produkte vorhanden.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
             )}
             {products.map((p) => (
               <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -410,7 +442,6 @@ function ProductsTab({ products }: { products: Product[] }) {
                   }
                 </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{p.commission_rate}%</td>
-                <td className="px-4 py-3 text-gray-600">{p.conversion_rate}%</td>
                 <td className="px-4 py-3">
                   {p.niche && <span className="bg-brand-light-pink text-brand-green text-xs font-medium px-2 py-0.5 rounded-full">{p.niche}</span>}
                 </td>
@@ -424,10 +455,10 @@ function ProductsTab({ products }: { products: Product[] }) {
                 <td className="px-4 py-3">
                   <button
                     disabled={isPending}
-                    onClick={() => startTransition(async () => { await toggleProductExclusive(p.id, !p.is_exclusive); fb('✓ Gespeichert') })}
+                    onClick={() => startTransition(async () => { await toggleProductExclusive(p.id, !p.is_exclusive); fb('✓ Saved') })}
                     className={`text-xs font-semibold px-2.5 py-1 rounded-full transition ${p.is_exclusive ? 'bg-brand-black text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                   >
-                    {p.is_exclusive ? 'Exklusiv ✓' : 'Normal'}
+                    {p.is_exclusive ? 'Exclusive ✓' : 'Standard'}
                   </button>
                 </td>
                 <td className="px-4 py-3">
@@ -438,20 +469,20 @@ function ProductsTab({ products }: { products: Product[] }) {
                           disabled={isPending}
                           onClick={() => startTransition(async () => {
                             if (Object.keys(editForm).length > 0) await updateProduct(p.id, editForm)
-                            fb('✓ Aktualisiert'); setEditingId(null); setEditForm({})
+                            fb('✓ Updated'); setEditingId(null); setEditForm({})
                           })}
                           className="text-xs bg-brand-green text-white px-2.5 py-1 rounded-lg"
-                        >Speichern</button>
-                        <button onClick={() => { setEditingId(null); setEditForm({}) }} className="text-xs text-gray-400 hover:text-gray-600">Abbrechen</button>
+                        >Save</button>
+                        <button onClick={() => { setEditingId(null); setEditForm({}) }} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
                       </>
                     ) : (
                       <>
-                        <button onClick={() => setEditingId(p.id)} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">Bearbeiten</button>
+                        <button onClick={() => setEditingId(p.id)} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">Edit</button>
                         <button
                           disabled={isPending}
-                          onClick={() => { if (confirm(`"${p.name}" wirklich löschen?`)) startTransition(async () => { await deleteProduct(p.id); fb('✓ Gelöscht') }) }}
+                          onClick={() => { if (confirm(`Delete "${p.name}"?`)) startTransition(async () => { await deleteProduct(p.id); fb('✓ Deleted') }) }}
                           className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
-                        >Löschen</button>
+                        >Delete</button>
                       </>
                     )}
                   </div>
@@ -482,39 +513,39 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Kampagnen</h2>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Campaigns</h2>
         <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
-          {showAdd ? 'Abbrechen' : '+ Kampagne hinzufügen'}
+          {showAdd ? 'Cancel' : '+ Add campaign'}
         </button>
       </div>
 
       {showAdd && (
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
-          <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">Neue Kampagne</h3>
+          <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">New campaign</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input placeholder="Markenname" value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field" />
-            <input placeholder="Beschreibung" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="input-field" />
-            <input placeholder="Provision %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
-            <input placeholder="Plätze verfügbar" type="number" value={form.spots_left} onChange={(e) => setForm((f) => ({ ...f, spots_left: e.target.value }))} className="input-field" />
+            <input placeholder="Brand name" value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field" />
+            <input placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} className="input-field" />
+            <input placeholder="Commission %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
+            <input placeholder="Spots available" type="number" value={form.spots_left} onChange={(e) => setForm((f) => ({ ...f, spots_left: e.target.value }))} className="input-field" />
             <input placeholder="Deadline" type="datetime-local" value={form.deadline} onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))} className="input-field" />
             <select value={form.min_level} onChange={(e) => setForm((f) => ({ ...f, min_level: e.target.value as CreatorLevel }))} className="input-field">
-              {LEVELS.map((l) => <option key={l} value={l}>ab {l}</option>)}
+              {LEVELS.map((l) => <option key={l} value={l}>from {l}</option>)}
             </select>
-            <input placeholder="Brand Logo URL" value={form.brand_logo_url} onChange={(e) => setForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field" />
+            <input placeholder="Brand logo URL" value={form.brand_logo_url} onChange={(e) => setForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field" />
             <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
-              <option value="">Produkt verknüpfen (optional)</option>
+              <option value="">Link product (optional)</option>
               {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             <input placeholder="Budget (€)" type="number" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} className="input-field" />
-            <input placeholder="Produkt-Link (Showcase)" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <input placeholder="Product link (showcase)" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700 sm:col-span-2">
               <input type="checkbox" checked={form.sample_available} onChange={(e) => setForm((f) => ({ ...f, sample_available: e.target.checked }))} className="rounded" />
-              Sample verfügbar
+              Sample available
             </label>
           </div>
           {form.brand_logo_url && (
             <div className="mt-3">
-              <p className="font-dm-sans text-xs text-gray-400 mb-1">Logo-Vorschau:</p>
+              <p className="font-dm-sans text-xs text-gray-400 mb-1">Logo preview:</p>
               <img src={form.brand_logo_url} alt="Logo" className="h-10 object-contain rounded border border-gray-200 bg-white px-2 py-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
             </div>
           )}
@@ -535,16 +566,16 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                 product_link: form.product_link || null,
                 sample_available: form.sample_available,
               })
-              if (r.error) fb(`Fehler: ${r.error}`)
+              if (r.error) fb(`Error: ${r.error}`)
               else {
-                fb('✓ Kampagne erstellt')
+                fb('✓ Campaign created')
                 setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', status: 'active', brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false })
                 setShowAdd(false)
               }
             })}
             className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
-            {isPending ? 'Speichern...' : 'Kampagne starten'}
+            {isPending ? 'Saving...' : 'Launch campaign'}
           </button>
         </div>
       )}
@@ -555,14 +586,14 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Logo', 'Marke', 'Provision', 'Plätze', 'Budget', 'Deadline', 'Min. Level', 'Status', 'Aktionen'].map((h) => (
+              {['Logo', 'Brand', 'Commission', 'Spots', 'Budget', 'Deadline', 'Min Level', 'Status', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {campaigns.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Keine Kampagnen vorhanden.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No campaigns yet.</td></tr>
             )}
             {campaigns.map((c) => (
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -580,7 +611,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   {editingSpots?.id === c.id ? (
                     <div className="flex items-center gap-1.5">
                       <input type="number" value={editingSpots.value} onChange={(e) => setEditingSpots({ id: c.id, value: e.target.value })} className="w-16 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none" autoFocus />
-                      <button onClick={() => startTransition(async () => { await updateCampaignSpots(c.id, parseInt(editingSpots.value)); fb('✓ Plätze aktualisiert'); setEditingSpots(null) })} className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg">✓</button>
+                      <button onClick={() => startTransition(async () => { await updateCampaignSpots(c.id, parseInt(editingSpots.value)); fb('✓ Spots updated'); setEditingSpots(null) })} className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg">✓</button>
                       <button onClick={() => setEditingSpots(null)} className="text-xs text-gray-400">✕</button>
                     </div>
                   ) : (
@@ -590,20 +621,20 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   )}
                 </td>
                 <td className="px-4 py-3 text-gray-600">
-                  {c.budget ? `€${c.budget.toLocaleString('de-DE')}` : '–'}
+                  {c.budget ? `€${c.budget.toLocaleString('en-DE')}` : '–'}
                 </td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
-                  {c.deadline ? new Date(c.deadline).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}
+                  {c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${LEVEL_COLORS[c.min_level] || 'bg-gray-100 text-gray-600'}`}>
-                    ab {c.min_level}
+                    from {c.min_level}
                   </span>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
                     <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${c.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
-                      {c.status === 'active' ? 'Aktiv' : 'Inaktiv'}
+                      {c.status === 'active' ? 'Active' : 'Inactive'}
                     </span>
                     {c.sample_available && (
                       <span className="text-xs font-medium bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Sample</span>
@@ -614,21 +645,21 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   <div className="flex items-center gap-2">
                     <button
                       disabled={isPending}
-                      onClick={() => startTransition(async () => { await toggleCampaignStatus(c.id, c.status); fb(`✓ Kampagne ${c.status === 'active' ? 'deaktiviert' : 'aktiviert'}`) })}
+                      onClick={() => startTransition(async () => { await toggleCampaignStatus(c.id, c.status); fb(`✓ Campaign ${c.status === 'active' ? 'deactivated' : 'activated'}`) })}
                       className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition"
                     >
-                      {c.status === 'active' ? 'Deaktivieren' : 'Aktivieren'}
+                      {c.status === 'active' ? 'Deactivate' : 'Activate'}
                     </button>
                     <button
                       disabled={isPending}
                       onClick={() => {
-                        if (confirm(`Kampagne "${c.brand_name}" wirklich löschen?`)) {
-                          startTransition(async () => { await deleteCampaign(c.id); fb('✓ Kampagne gelöscht') })
+                        if (confirm(`Delete campaign "${c.brand_name}"?`)) {
+                          startTransition(async () => { await deleteCampaign(c.id); fb('✓ Campaign deleted') })
                         }
                       }}
                       className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
                     >
-                      Löschen
+                      Delete
                     </button>
                   </div>
                 </td>
@@ -641,133 +672,14 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
   )
 }
 
-// ── Tasks Tab ─────────────────────────────────────────────────────────────────
-function TasksTab({ creators, products, todayTasks }: { creators: Creator[]; products: Product[]; todayTasks: TodayTask[] }) {
-  const [assignForm, setAssignForm] = useState({ creator_id: '', product_id: '', task_name: '', is_hero: false })
-  const [bulkForm, setBulkForm] = useState({ level: 'Initiation' as CreatorLevel, product_id: '', task_name: '', is_hero: false })
-  const [feedback, setFeedback] = useState<string | null>(null)
-  const [isPending, startTransition] = useTransition()
-
-  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 5000) }
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">Aufgabe zuweisen</h2>
-        <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <select value={assignForm.creator_id} onChange={(e) => setAssignForm((f) => ({ ...f, creator_id: e.target.value }))} className="input-field">
-              <option value="">Creator auswählen…</option>
-              {creators.filter((c) => c.is_active).map((c) => (
-                <option key={c.id} value={c.id}>{c.name || c.email}</option>
-              ))}
-            </select>
-            <select value={assignForm.product_id} onChange={(e) => setAssignForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
-              <option value="">Produkt auswählen…</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <input placeholder="Aufgabenname (z.B. TikTok-Video posten)" value={assignForm.task_name} onChange={(e) => setAssignForm((f) => ({ ...f, task_name: e.target.value }))} className="input-field sm:col-span-2" />
-            <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
-              <input type="checkbox" checked={assignForm.is_hero} onChange={(e) => setAssignForm((f) => ({ ...f, is_hero: e.target.checked }))} className="rounded" />
-              Als Hero-Produkt markieren
-            </label>
-          </div>
-          <button
-            disabled={isPending || !assignForm.creator_id || !assignForm.product_id || !assignForm.task_name}
-            onClick={() => startTransition(async () => {
-              const r = await assignTask({ creator_id: assignForm.creator_id, product_id: assignForm.product_id, task_name: assignForm.task_name, is_hero: assignForm.is_hero })
-              if (r.error) fb(`Fehler: ${r.error}`)
-              else { fb('✓ Aufgabe zugewiesen!'); setAssignForm({ creator_id: '', product_id: '', task_name: '', is_hero: false }) }
-            })}
-            className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
-          >
-            {isPending ? 'Zuweisen...' : 'Aufgabe zuweisen'}
-          </button>
-        </div>
-      </div>
-
-      <div>
-        <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">Bulk-Zuweisung nach Level</h2>
-        <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <select value={bulkForm.level} onChange={(e) => setBulkForm((f) => ({ ...f, level: e.target.value as CreatorLevel }))} className="input-field">
-              {LEVELS.map((l) => <option key={l} value={l}>Level: {l}</option>)}
-            </select>
-            <select value={bulkForm.product_id} onChange={(e) => setBulkForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
-              <option value="">Produkt auswählen…</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-            <input placeholder="Aufgabenname" value={bulkForm.task_name} onChange={(e) => setBulkForm((f) => ({ ...f, task_name: e.target.value }))} className="input-field sm:col-span-2" />
-            <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
-              <input type="checkbox" checked={bulkForm.is_hero} onChange={(e) => setBulkForm((f) => ({ ...f, is_hero: e.target.checked }))} className="rounded" />
-              Als Hero-Produkt markieren
-            </label>
-          </div>
-          <button
-            disabled={isPending || !bulkForm.product_id || !bulkForm.task_name}
-            onClick={() => startTransition(async () => {
-              const r = await bulkAssignTask({ level: bulkForm.level, product_id: bulkForm.product_id, task_name: bulkForm.task_name, is_hero: bulkForm.is_hero })
-              if (r.error) fb(`Fehler: ${r.error}`)
-              else { fb(`✓ ${r.count} Creator zugewiesen!`); setBulkForm({ level: 'Initiation', product_id: '', task_name: '', is_hero: false }) }
-            })}
-            className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
-          >
-            {isPending ? 'Zuweisen...' : 'Alle zuweisen'}
-          </button>
-        </div>
-      </div>
-
-      <Feedback msg={feedback} />
-
-      <div>
-        <h2 className="font-dm-sans font-bold text-base text-brand-black mb-3">
-          Heutige Aufgaben{' '}
-          <span className="font-normal text-gray-400 text-sm">
-            ({todayTasks.filter((t) => t.completed).length}/{todayTasks.length} erledigt)
-          </span>
-        </h2>
-        <div className="overflow-x-auto rounded-2xl border border-gray-100">
-          <table className="w-full text-sm font-dm-sans">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                {['Creator', 'Aufgabe', 'Produkt', 'Hero', 'Status'].map((h) => (
-                  <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {todayTasks.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Keine Aufgaben heute.</td></tr>
-              )}
-              {todayTasks.map((t) => (
-                <tr key={t.id} className="bg-white hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-brand-black">{t.creator?.name || t.creator?.email || '–'}</td>
-                  <td className="px-4 py-3 text-gray-700">{t.task_name || '–'}</td>
-                  <td className="px-4 py-3 text-gray-500">{t.product?.name || '–'}</td>
-                  <td className="px-4 py-3">{t.is_hero && <span className="font-dm-sans text-xs font-bold bg-brand-black text-white px-2 py-0.5 rounded-full">★ Hero</span>}</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${t.completed ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                      {t.completed ? '✓ Erledigt' : '○ Offen'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Applications Tab ──────────────────────────────────────────────────────────
 function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Kampagnen-Bewerbungen</h2>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Campaign Applications</h2>
         <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
-          {applications.length} gesamt
+          {applications.length} total
         </span>
       </div>
 
@@ -775,14 +687,14 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Creator', 'Kampagne', 'Posts', 'Live-Stunden', 'Angebot (€)', 'Datum'].map((h) => (
+              {['Creator', 'Campaign', 'Posts', 'Live hours', 'Offer (€)', 'Date'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {applications.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Noch keine Bewerbungen.</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No applications yet.</td></tr>
             )}
             {applications.map((a) => (
               <tr key={a.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -792,22 +704,16 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
                     <p className="text-xs text-gray-400 font-normal">{a.creator.email}</p>
                   )}
                 </td>
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
-                  {a.campaign?.brand_name || '–'}
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className="font-semibold text-brand-black">{a.posts_offered ?? '–'}</span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <span className="font-semibold text-brand-black">{a.live_hours_offered ?? '–'}h</span>
-                </td>
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{a.campaign?.brand_name || '–'}</td>
+                <td className="px-4 py-3 text-center"><span className="font-semibold text-brand-black">{a.posts_offered ?? '–'}</span></td>
+                <td className="px-4 py-3 text-center"><span className="font-semibold text-brand-black">{a.live_hours_offered ?? '–'}h</span></td>
                 <td className="px-4 py-3">
                   <span className="font-bold text-brand-green">
-                    {a.price_offered != null ? `€${Number(a.price_offered).toLocaleString('de-DE')}` : '–'}
+                    {a.price_offered != null ? `€${Number(a.price_offered).toLocaleString('en-DE')}` : '–'}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                  {new Date(a.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(a.created_at).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </td>
               </tr>
             ))}
@@ -818,20 +724,147 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'tasks' | 'applications' | 'strategy'
+// ── Product Requests Tab ──────────────────────────────────────────────────────
+function RequestsTab({ productRequests }: { productRequests: ProductRequestRow[] }) {
+  const [isPending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<string | null>(null)
 
-export default function AdminPanel({ creators, products, campaigns, todayTasks, applications }: AdminPanelProps) {
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  const STATUS_COLORS: Record<string, string> = {
+    pending: 'bg-amber-50 text-amber-700',
+    contacted: 'bg-blue-50 text-blue-700',
+    done: 'bg-emerald-50 text-emerald-700',
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Product Requests</h2>
+        <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+          {productRequests.length} total
+        </span>
+      </div>
+
+      <Feedback msg={feedback} />
+
+      <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <table className="w-full text-sm font-dm-sans">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              {['Creator', 'Product', 'Brand', 'Reason', 'Date', 'Status'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {productRequests.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No product requests yet.</td></tr>
+            )}
+            {productRequests.map((r) => (
+              <tr key={r.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">
+                  {r.creator?.name || r.creator?.email || '–'}
+                  {r.creator?.email && r.creator?.name && (
+                    <p className="text-xs text-gray-400 font-normal">{r.creator.email}</p>
+                  )}
+                </td>
+                <td className="px-4 py-3 font-medium text-brand-black">{r.product_name}</td>
+                <td className="px-4 py-3 text-gray-600">{r.brand_name}</td>
+                <td className="px-4 py-3 text-gray-500 max-w-xs">
+                  <p className="truncate">{r.reason || '–'}</p>
+                </td>
+                <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                  {new Date(r.created_at).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                </td>
+                <td className="px-4 py-3">
+                  <select
+                    value={r.status}
+                    disabled={isPending}
+                    onChange={(e) => startTransition(async () => {
+                      await updateProductRequestStatus(r.id, e.target.value)
+                      fb('✓ Status updated')
+                    })}
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer ${STATUS_COLORS[r.status] ?? 'bg-gray-100 text-gray-600'}`}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="contacted">Contacted</option>
+                    <option value="done">Done</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Settings Tab ──────────────────────────────────────────────────────────────
+function SettingsTab() {
+  const [copied, setCopied] = useState(false)
+  const hackUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/hack`
+    : '/hack'
+
+  function copyHackUrl() {
+    navigator.clipboard.writeText(hackUrl).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">General Settings</h2>
+
+        <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5">
+          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Hack Portal URL</h3>
+          <p className="font-dm-sans text-xs text-gray-500 mb-3">
+            Share this public link to give free preview access to potential creators.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-mono text-gray-700 truncate">
+              {hackUrl}
+            </code>
+            <button
+              onClick={copyHackUrl}
+              className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-4 py-2.5 rounded-xl hover:bg-brand-black/80 transition shrink-0"
+            >
+              {copied ? '✓ Copied!' : 'Copy'}
+            </button>
+          </div>
+          <a
+            href="/hack"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block mt-2 font-dm-sans text-xs text-brand-green hover:underline"
+          >
+            Open Hack Portal →
+          </a>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'strategy' | 'settings'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'creators', label: 'Creators', count: creators.length },
-    { id: 'products', label: 'Produkte', count: products.length },
-    { id: 'campaigns', label: 'Kampagnen', count: campaigns.length },
-    { id: 'tasks', label: 'Aufgaben', count: todayTasks.length },
-    { id: 'applications', label: 'Bewerbungen', count: applications.length },
-    { id: 'strategy', label: 'Estrategia' },
+    { id: 'products', label: 'Products', count: products.length },
+    { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
+    { id: 'applications', label: 'Applications', count: applications.length },
+    { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
+    { id: 'strategy', label: 'Strategy' },
+    { id: 'settings', label: 'Settings' },
   ]
 
   return (
@@ -851,14 +884,14 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks, 
             </div>
             <div className="flex items-center gap-3">
               <a href="/" className="font-dm-sans text-sm text-white/40 hover:text-white transition px-3 py-1.5 rounded-lg hover:bg-white/5">
-                ← App ansehen
+                ← View app
               </a>
               <button
                 disabled={isPending}
                 onClick={() => startTransition(async () => { await adminLogout() })}
                 className="font-dm-sans text-sm font-semibold text-brand-black bg-brand-pink hover:bg-brand-pink/90 px-4 py-2 rounded-xl transition disabled:opacity-50"
               >
-                Abmelden
+                Sign out
               </button>
             </div>
           </div>
@@ -880,7 +913,7 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks, 
                 }`}
               >
                 {tab.label}
-                {tab.count !== undefined && (
+                {tab.count !== undefined && tab.count > 0 && (
                   <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${activeTab === tab.id ? 'bg-brand-pink text-brand-black' : 'bg-white/10 text-white/40'}`}>
                     {tab.count}
                   </span>
@@ -897,9 +930,10 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks, 
           {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} />}
           {activeTab === 'products' && <ProductsTab products={products} />}
           {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
-          {activeTab === 'tasks' && <TasksTab creators={creators} products={products} todayTasks={todayTasks} />}
           {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
+          {activeTab === 'requests' && <RequestsTab productRequests={productRequests} />}
           {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
+          {activeTab === 'settings' && <SettingsTab />}
         </div>
       </div>
     </div>

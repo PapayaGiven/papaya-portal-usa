@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Nav from '@/components/Nav'
 import Image from 'next/image'
-import { StrategyProduct, StrategyVideo } from '@/lib/types'
+import Nav from '@/components/Nav'
+import DailyChecklist from '@/components/DailyChecklist'
+import { StrategyProduct } from '@/lib/types'
 
 const PRIORITY_STYLES = {
   Hero: { badge: 'bg-amber-100 text-amber-700 border border-amber-300', dot: 'bg-amber-400' },
@@ -10,7 +11,7 @@ const PRIORITY_STYLES = {
   Supporting: { badge: 'bg-gray-100 text-gray-600 border border-gray-200', dot: 'bg-gray-400' },
 }
 
-function VideoCard({ video }: { video: StrategyVideo }) {
+function VideoCard({ video }: { video: { id: string; video_url: string; thumbnail_url: string | null } }) {
   return (
     <a
       href={video.video_url}
@@ -40,7 +41,7 @@ function VideoCard({ video }: { video: StrategyVideo }) {
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
-          <p className="font-dm-sans text-xs text-gray-400">TikTok ansehen</p>
+          <p className="font-dm-sans text-xs text-gray-400">Watch on TikTok</p>
         </div>
       )}
       <div className="px-3 py-2 bg-white">
@@ -62,13 +63,14 @@ export default async function StrategyPage() {
     .eq('email', user.email!)
     .single()
 
-  // Current month as "YYYY-MM-01"
   const now = new Date()
   const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const monthLabel = now.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const today = now.toISOString().split('T')[0]
 
-  let strategy = null
+  let strategyId: string | null = null
   let strategyProducts: StrategyProduct[] = []
+  let checklistEntries: { strategy_product_id: string; video_posted: boolean; live_done: boolean }[] = []
 
   if (creator) {
     const { data: stratData } = await supabase
@@ -79,7 +81,7 @@ export default async function StrategyPage() {
       .maybeSingle()
 
     if (stratData) {
-      strategy = stratData
+      strategyId = stratData.id
       const { data: products } = await supabase
         .from('strategy_products')
         .select(`
@@ -92,9 +94,21 @@ export default async function StrategyPage() {
         .order('created_at')
 
       strategyProducts = (products ?? []) as StrategyProduct[]
+
+      // Fetch today's checklist entries
+      const { data: checklist } = await supabase
+        .from('daily_checklist')
+        .select('strategy_product_id, video_posted, live_done')
+        .eq('creator_id', creator.id)
+        .eq('date', today)
+
+      checklistEntries = checklist ?? []
     }
   }
 
+  const hasChecklist = strategyProducts.some(
+    (sp) => (sp.videos_per_day ?? 0) > 0 || (sp.live_hours_per_week ?? 0) > 0
+  )
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
@@ -115,15 +129,31 @@ export default async function StrategyPage() {
           </div>
         </div>
 
+        {/* Daily Checklist */}
+        {creator && hasChecklist && (
+          <div className="mb-8">
+            <DailyChecklist
+              creatorId={creator.id}
+              strategyProducts={strategyProducts.map((sp) => ({
+                id: sp.id,
+                product: sp.product as { name: string } | null,
+                videos_per_day: sp.videos_per_day,
+                live_hours_per_week: sp.live_hours_per_week,
+              }))}
+              checklistEntries={checklistEntries}
+            />
+          </div>
+        )}
+
         {/* No strategy yet */}
-        {!strategy || strategyProducts.length === 0 ? (
+        {(!strategyId || strategyProducts.length === 0) ? (
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
             <p className="text-4xl mb-3">📋</p>
             <h2 className="font-playfair text-2xl text-brand-black mb-2">
-              Noch keine Strategie für {monthLabel}
+              No strategy yet for {monthLabel}
             </h2>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Deine Agentur wird in Kürze deine Monatsstrategie erstellen.
+              Your agency will create your monthly strategy soon.
             </p>
           </div>
         ) : (
@@ -153,7 +183,7 @@ export default async function StrategyPage() {
                       )}
                       <div>
                         <h2 className="font-playfair text-xl text-brand-black leading-tight">
-                          {product?.name ?? 'Produkt'}
+                          {product?.name ?? 'Product'}
                         </h2>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {product?.niche && (
@@ -163,7 +193,7 @@ export default async function StrategyPage() {
                           )}
                           {product?.commission_rate != null && (
                             <span className="font-dm-sans text-xs font-bold text-brand-pink">
-                              {product.commission_rate}% Provision
+                              {product.commission_rate}% Commission
                             </span>
                           )}
                         </div>
@@ -177,7 +207,7 @@ export default async function StrategyPage() {
                       {sp.is_retainer && (
                         <span className="font-dm-sans text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                          Retainer-Kampagne
+                          Retainer Campaign
                         </span>
                       )}
                       {campaign && (
@@ -189,43 +219,33 @@ export default async function StrategyPage() {
                   {/* Stats */}
                   <div className="grid grid-cols-3 divide-x divide-gray-50 border-b border-gray-50">
                     <div className="px-5 py-4 text-center">
-                      <p className="font-playfair text-2xl font-bold text-brand-black">
-                        {sp.videos_per_day ?? '–'}
-                      </p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Tag</p>
+                      <p className="font-playfair text-2xl font-bold text-brand-black">{sp.videos_per_day ?? '–'}</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Day</p>
                     </div>
                     <div className="px-5 py-4 text-center">
-                      <p className="font-playfair text-2xl font-bold text-brand-black">
-                        {sp.live_hours_per_week ?? '–'}h
-                      </p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Woche</p>
+                      <p className="font-playfair text-2xl font-bold text-brand-black">{sp.live_hours_per_week ?? '–'}h</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Week</p>
                     </div>
                     <div className="px-5 py-4 text-center">
                       <p className="font-playfair text-2xl font-bold text-brand-green">
-                        {sp.gmv_target != null ? `€${Number(sp.gmv_target).toLocaleString('de-DE')}` : '–'}
+                        {sp.gmv_target != null ? `€${Number(sp.gmv_target).toLocaleString('en-DE')}` : '–'}
                       </p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">GMV-Ziel</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">GMV Target</p>
                     </div>
                   </div>
 
                   {/* Strategy note */}
                   {sp.strategy_note && (
                     <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                        Strategie
-                      </h3>
-                      <p className="font-dm-sans text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                        {sp.strategy_note}
-                      </p>
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Strategy</h3>
+                      <p className="font-dm-sans text-sm text-gray-700 leading-relaxed whitespace-pre-line">{sp.strategy_note}</p>
                     </div>
                   )}
 
                   {/* Hashtags */}
                   {sp.hashtags && sp.hashtags.length > 0 && (
                     <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">
-                        Hashtags
-                      </h3>
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Hashtags</h3>
                       <div className="flex flex-wrap gap-2">
                         {sp.hashtags.map((tag, i) => (
                           <span key={i} className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-2.5 py-1 rounded-full">
@@ -239,9 +259,7 @@ export default async function StrategyPage() {
                   {/* Example videos */}
                   {sp.videos && sp.videos.length > 0 && (
                     <div className="px-6 py-4">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                        Beispiel-Videos
-                      </h3>
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Example Videos</h3>
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                         {sp.videos.map((video) => (
                           <VideoCard key={video.id} video={video} />

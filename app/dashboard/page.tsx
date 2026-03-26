@@ -2,23 +2,21 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Task, Campaign, Product, LEVEL_CONFIG, StrategyProduct } from '@/lib/types'
+import { Creator, Campaign, Product, LEVEL_CONFIG, StrategyProduct } from '@/lib/types'
 import Nav from '@/components/Nav'
 import SmartBanner from '@/components/SmartBanner'
 import GMVRing from '@/components/GMVRing'
-import DailyTasks from '@/components/DailyTasks'
 import CampaignCard from '@/components/CampaignCard'
 import ProductCard from '@/components/ProductCard'
+import ProductRequestButton from '@/components/ProductRequestButton'
 
 function computeBanner(
   creator: Creator,
-  tasks: Task[],
   campaigns: Campaign[],
   products: Product[]
-): { type: 'urgent' | 'tasks' | 'products' | 'gmv'; title: string; message: string } | null {
+): { type: 'urgent' | 'products' | 'gmv'; title: string; message: string } | null {
   const now = new Date()
 
-  // Priority 1: Campaign deadline within 24 hours
   const urgentCampaign = campaigns.find((c) => {
     if (!c.deadline) return false
     const deadline = new Date(c.deadline)
@@ -27,41 +25,29 @@ function computeBanner(
   if (urgentCampaign) {
     return {
       type: 'urgent',
-      title: 'Kampagne läuft bald ab!',
-      message: `${urgentCampaign.brand_name} endet in weniger als 24 Stunden. Bewerbe dich jetzt!`,
+      title: 'Campaign ending soon!',
+      message: `${urgentCampaign.brand_name} closes in less than 24 hours. Apply now!`,
     }
   }
 
-  // Priority 2: Incomplete tasks today
-  const incompleteTasks = tasks.filter((t) => !t.completed)
-  if (incompleteTasks.length > 0) {
-    return {
-      type: 'tasks',
-      title: 'Du hast offene Aufgaben!',
-      message: `${incompleteTasks.length} Aufgabe${incompleteTasks.length !== 1 ? 'n' : ''} noch offen für heute. Jetzt erledigen!`,
-    }
-  }
-
-  // Priority 3: High commission products
   const highCommProduct = products.find(
     (p) => p.commission_rate !== null && p.commission_rate > 25
   )
   if (highCommProduct) {
     return {
       type: 'products',
-      title: 'Top-Produkt verfügbar!',
-      message: `${highCommProduct.name} bietet ${highCommProduct.commission_rate}% Provision. Jetzt promoten!`,
+      title: 'Top product available!',
+      message: `${highCommProduct.name} offers ${highCommProduct.commission_rate}% commission. Start promoting!`,
     }
   }
 
-  // Priority 4: Close to next level
   const remaining = creator.gmv_target - creator.gmv
   if (remaining > 0 && remaining < 100) {
     const config = LEVEL_CONFIG[creator.level]
     return {
       type: 'gmv',
-      title: 'Du bist fast da!',
-      message: `Nur noch €${remaining.toFixed(0)} bis Level ${config.next ?? 'Elite'}. Gib Gas!`,
+      title: 'Almost there!',
+      message: `Only €${remaining.toFixed(0)} more to reach ${config.next ?? 'Elite'}. Keep going!`,
     }
   }
 
@@ -71,15 +57,9 @@ function computeBanner(
 export default async function DashboardPage() {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
 
-  if (!user) {
-    redirect('/login')
-  }
-
-  // Fetch creator
   const { data: creatorData } = await supabase
     .from('creators')
     .select('*')
@@ -88,20 +68,7 @@ export default async function DashboardPage() {
 
   const creator = creatorData as Creator | null
 
-  const today = new Date().toISOString().split('T')[0]
-
-  // Fetch tasks with product join
-  const { data: tasksData } = creator
-    ? await supabase
-        .from('tasks')
-        .select('*, product:products(*)')
-        .eq('creator_id', creator.id)
-        .eq('date', today)
-    : { data: [] }
-
-  const tasks = (tasksData ?? []) as Task[]
-
-  // Fetch active campaigns not expired
+  // Fetch active campaigns
   const { data: campaignsData } = await supabase
     .from('campaigns')
     .select('*')
@@ -122,7 +89,7 @@ export default async function DashboardPage() {
   // Fetch current month strategy recap
   const now = new Date()
   const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const monthLabel = now.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   let strategyProducts: StrategyProduct[] = []
 
   if (creator) {
@@ -152,15 +119,12 @@ export default async function DashboardPage() {
     })
     .slice(0, 2)
 
-  // Smart banner
-  const banner = creator
-    ? computeBanner(creator, tasks, campaigns, products)
-    : null
-
+  const banner = creator ? computeBanner(creator, campaigns, products) : null
   const levelConfig = creator ? LEVEL_CONFIG[creator.level] : null
-  const greeting = creator?.name
-    ? `Hallo, ${creator.name.split(' ')[0]}! 👋`
-    : 'Willkommen zurück! 👋'
+  const personalGoal = creator?.personal_gmv_goal ?? 0
+  const personalProgress = personalGoal > 0 ? Math.min((creator?.gmv ?? 0) / personalGoal, 1) : 0
+
+  const firstName = creator?.name?.split(' ')[0] ?? null
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
@@ -178,34 +142,23 @@ export default async function DashboardPage() {
             aria-hidden="true"
           />
           <div>
-            <h1 className="font-playfair text-3xl text-brand-black">{greeting}</h1>
+            <h1 className="font-playfair text-3xl text-brand-black">
+              {firstName ? `Hello, ${firstName}!` : 'Welcome back!'}
+            </h1>
             <p className="font-dm-sans text-sm text-gray-500 mt-1">
-              {new Date().toLocaleDateString('de-DE', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
+              {now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
 
-          {/* Level badge - inside relative container, ensure z-index above watermark */}
           {creator && (
             <div className="flex items-center gap-2">
-              <span className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">
-                Level
-              </span>
+              <span className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">Level</span>
               <span
                 className="font-dm-sans font-bold text-sm px-3 py-1 rounded-full text-white"
                 style={{ backgroundColor: levelConfig?.color ?? '#9CA3AF' }}
               >
                 {creator.level}
               </span>
-              {creator.streak > 0 && (
-                <span className="font-dm-sans text-sm text-amber-500 font-semibold">
-                  🔥 {creator.streak} Tage
-                </span>
-              )}
             </div>
           )}
         </div>
@@ -221,19 +174,14 @@ export default async function DashboardPage() {
         {!creator && (
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-8 text-center mb-6">
             <p className="text-4xl mb-3">🌴</p>
-            <h2 className="font-playfair text-2xl text-brand-black mb-2">
-              Dein Profil wird eingerichtet.
-            </h2>
-            <p className="font-dm-sans text-gray-500 text-sm">
-              Deine Agentur wird dein Creator-Profil in Kürze aktivieren.
-            </p>
+            <h2 className="font-playfair text-2xl text-brand-black mb-2">Your profile is being set up.</h2>
+            <p className="font-dm-sans text-gray-500 text-sm">Your agency will activate your creator profile soon.</p>
           </div>
         )}
 
-        {/* Main content grid */}
         {creator && (
           <>
-            {/* Strategy Recap + Community + Education row */}
+            {/* Strategy + Community + Education */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
               {/* Strategy Recap */}
               <div className="sm:col-span-1 bg-white rounded-2xl border border-brand-pink/20 p-5 flex flex-col justify-between">
@@ -255,19 +203,16 @@ export default async function DashboardPage() {
                       })}
                       {totalVideosPerDay > 0 && (
                         <p className="font-dm-sans text-xs text-gray-400 mt-2">
-                          {totalVideosPerDay} Videos / Tag insgesamt
+                          {totalVideosPerDay} videos/day total
                         </p>
                       )}
                     </div>
                   ) : (
-                    <p className="font-dm-sans text-sm text-gray-400">Noch keine Strategie für diesen Monat.</p>
+                    <p className="font-dm-sans text-sm text-gray-400">No strategy yet for this month.</p>
                   )}
                 </div>
-                <Link
-                  href="/strategy"
-                  className="mt-4 font-dm-sans text-xs font-semibold text-brand-green hover:underline"
-                >
-                  Vollständige Strategie ansehen →
+                <Link href="/strategy" className="mt-4 font-dm-sans text-xs font-semibold text-brand-green hover:underline">
+                  View full strategy →
                 </Link>
               </div>
 
@@ -284,11 +229,11 @@ export default async function DashboardPage() {
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                     </svg>
                   </div>
-                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Comunidad</h3>
-                  <p className="font-dm-sans text-xs text-gray-500">WhatsApp-Gruppe der Papaya Creators</p>
+                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Community</h3>
+                  <p className="font-dm-sans text-xs text-gray-500">WhatsApp group for Papaya creators</p>
                 </div>
                 <span className="mt-3 font-dm-sans text-xs font-semibold text-brand-pink group-hover:underline">
-                  Gruppe beitreten →
+                  Join the group →
                 </span>
               </a>
 
@@ -305,16 +250,16 @@ export default async function DashboardPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                     </svg>
                   </div>
-                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Educación</h3>
-                  <p className="font-dm-sans text-xs text-gray-500">Trainings & Ressourcen für TikTok-Erfolg</p>
+                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Education</h3>
+                  <p className="font-dm-sans text-xs text-gray-500">Trainings &amp; resources for TikTok success</p>
                 </div>
                 <span className="mt-3 font-dm-sans text-xs font-semibold text-brand-green group-hover:underline">
-                  Kurse öffnen →
+                  Open courses →
                 </span>
               </a>
             </div>
 
-            {/* GMV + Tasks side by side */}
+            {/* GMV Ring + Personal Goal */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
               <GMVRing
                 gmv={creator.gmv}
@@ -322,19 +267,81 @@ export default async function DashboardPage() {
                 level={creator.level}
                 nextLevel={levelConfig?.next ?? null}
               />
-              <DailyTasks tasks={tasks} creatorId={creator.id} />
+
+              {/* Personal Goal Card */}
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
+                <div className="flex flex-col items-center gap-1">
+                  <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">My Personal Goal</h3>
+                  <span className="font-dm-sans text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">Self-set target</span>
+                </div>
+
+                {personalGoal > 0 ? (
+                  <>
+                    <div className="relative" style={{ width: 180, height: 180 }}>
+                      <svg width="180" height="180" className="rotate-[-90deg]">
+                        <circle cx="90" cy="90" r="70" fill="none" stroke="#F3F4F6" strokeWidth="12" />
+                        <circle
+                          cx="90"
+                          cy="90"
+                          r="70"
+                          fill="none"
+                          stroke="#1B5E3B"
+                          strokeWidth="12"
+                          strokeLinecap="round"
+                          strokeDasharray={2 * Math.PI * 70}
+                          strokeDashoffset={2 * Math.PI * 70 * (1 - personalProgress)}
+                          style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="font-dm-sans font-bold text-2xl text-brand-black leading-none">
+                          €{creator.gmv.toLocaleString('en-DE')}
+                        </span>
+                        <span className="font-dm-sans text-xs text-gray-400 mt-1">
+                          of €{personalGoal.toLocaleString('en-DE')}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <p className="font-dm-sans text-sm text-gray-600">
+                        {personalProgress >= 1 ? (
+                          <span className="font-semibold text-brand-green">🎯 Personal goal reached!</span>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-brand-green">
+                              €{Math.max(personalGoal - creator.gmv, 0).toLocaleString('en-DE')}
+                            </span>{' '}
+                            more to reach your goal
+                          </>
+                        )}
+                      </p>
+                      <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full bg-brand-green transition-all duration-1000"
+                          style={{ width: `${Math.min(personalProgress * 100, 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 font-dm-sans mt-1">
+                        {Math.round(personalProgress * 100)}% of personal goal
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
+                    <p className="text-4xl mb-3">🎯</p>
+                    <p className="font-dm-sans text-sm text-gray-500 mb-1">No personal goal set yet.</p>
+                    <p className="font-dm-sans text-xs text-gray-400">Ask your agency to set a personal GMV goal for you.</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Campaigns */}
             {campaigns.length > 0 && (
               <section className="mb-8">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-playfair text-2xl text-brand-black">
-                    Aktuelle Kampagnen
-                  </h2>
-                  <span className="font-dm-sans text-xs text-gray-400">
-                    {campaigns.length} aktiv
-                  </span>
+                  <h2 className="font-playfair text-2xl text-brand-black">Active Campaigns</h2>
+                  <span className="font-dm-sans text-xs text-gray-400">{campaigns.length} active</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {campaigns.map((campaign) => (
@@ -348,12 +355,11 @@ export default async function DashboardPage() {
             {products.length > 0 && (
               <section>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-playfair text-2xl text-brand-black">
-                    Top Produkte
-                  </h2>
-                  <span className="font-dm-sans text-xs text-gray-400">
-                    Nach Provision
-                  </span>
+                  <h2 className="font-playfair text-2xl text-brand-black">Top Products</h2>
+                  <div className="flex items-center gap-3">
+                    <span className="font-dm-sans text-xs text-gray-400">By commission</span>
+                    <ProductRequestButton />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                   {products.map((product) => (

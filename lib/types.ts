@@ -8,6 +8,7 @@ export interface Creator {
   level: CreatorLevel
   gmv: number
   gmv_target: number
+  personal_gmv_goal: number
   streak: number
   cohort_rank: number | null
   hero_product_id: string | null
@@ -99,6 +100,26 @@ export interface Strategy {
   month: string
   created_at: string
   products?: StrategyProduct[]
+}
+
+export interface DailyChecklist {
+  id: string
+  creator_id: string
+  strategy_product_id: string
+  date: string
+  video_posted: boolean
+  live_done: boolean
+  created_at: string
+}
+
+export interface ProductRequest {
+  id: string
+  creator_id: string
+  product_name: string
+  brand_name: string
+  reason: string | null
+  status: string
+  created_at: string
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Campaign } from '@/lib/types'
 
 interface CampaignCardProps {
@@ -13,14 +14,14 @@ function getTimeRemaining(deadline: string | null): string {
   const end = new Date(deadline).getTime()
   const diff = end - now
 
-  if (diff <= 0) return 'Abgelaufen'
+  if (diff <= 0) return 'Expired'
 
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
   const days = Math.floor(hours / 24)
 
   if (days >= 1) {
-    return `${days} Tag${days !== 1 ? 'e' : ''} ${hours % 24}h`
+    return `${days}d ${hours % 24}h`
   }
   return `${hours}h ${minutes}m`
 }
@@ -65,22 +66,20 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <span className="font-dm-sans font-bold text-2xl text-brand-pink">
             {campaign.commission_rate}%
           </span>
-          <p className="font-dm-sans text-xs text-gray-400">Provision</p>
+          <p className="font-dm-sans text-xs text-gray-400">Commission</p>
         </div>
       </div>
 
       {/* Badges row */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* Min level */}
         <span
           className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
             LEVEL_COLORS[campaign.min_level] || 'bg-gray-100 text-gray-600'
           }`}
         >
-          ab {campaign.min_level}
+          from {campaign.min_level}
         </span>
 
-        {/* Spots left */}
         {campaign.spots_left !== null && (
           <span
             className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
@@ -90,12 +89,11 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
             }`}
           >
             {campaign.spots_left <= 3
-              ? `⚠️ Nur ${campaign.spots_left} Plätze übrig!`
-              : `${campaign.spots_left} Plätze verfügbar`}
+              ? `⚠️ Only ${campaign.spots_left} spots left!`
+              : `${campaign.spots_left} spots available`}
           </span>
         )}
 
-        {/* Deadline */}
         {timeLeft && (
           <span
             className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
@@ -110,12 +108,13 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
       </div>
 
       {/* CTA */}
-      <button
-        className="mt-auto w-full py-2.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
+      <Link
+        href={`/campaigns/${campaign.id}`}
+        className="mt-auto w-full py-2.5 rounded-xl font-dm-sans font-semibold text-sm text-white text-center transition-all hover:opacity-90 active:scale-[0.98] block"
         style={{ backgroundColor: '#1B5E3B' }}
       >
-        Bewerben →
-      </button>
+        Apply →
+      </Link>
     </div>
   )
 }

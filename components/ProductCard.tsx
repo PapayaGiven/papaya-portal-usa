@@ -16,33 +16,32 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
         {product.is_exclusive && (
           <span className="font-dm-sans text-xs font-bold bg-brand-black text-white px-2.5 py-1 rounded-full tracking-wide">
-            EXKLUSIV
+            EXCLUSIVE
           </span>
         )}
       </div>
+
+      {/* Product image */}
+      {product.image_url && (
+        <img
+          src={product.image_url}
+          alt={product.name}
+          className="w-full h-28 object-cover rounded-xl border border-gray-100"
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+        />
+      )}
 
       {/* Product name */}
       <h3 className="font-dm-sans font-semibold text-brand-black text-base leading-snug">
         {product.name}
       </h3>
 
-      {/* Stats */}
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="font-dm-sans font-bold text-2xl text-brand-pink leading-none">
-            {product.commission_rate}%
-          </p>
-          <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Provision</p>
-        </div>
-
-        {product.conversion_rate !== null && (
-          <div className="text-right">
-            <p className="font-dm-sans font-semibold text-base text-gray-700 leading-none">
-              {product.conversion_rate}%
-            </p>
-            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Conversion</p>
-          </div>
-        )}
+      {/* Commission */}
+      <div>
+        <p className="font-dm-sans font-bold text-2xl text-brand-pink leading-none">
+          {product.commission_rate}%
+        </p>
+        <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Commission</p>
       </div>
     </div>
   )

@@ -25,7 +25,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
   const remaining = target - gmv
 
   function formatEur(val: number) {
-    return new Intl.NumberFormat('de-DE', {
+    return new Intl.NumberFormat('en-DE', {
       style: 'currency',
       currency: 'EUR',
       maximumFractionDigits: 0,
@@ -36,7 +36,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
     <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
       <div className="flex flex-col items-center gap-1">
         <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">
-          Dein GMV
+          Your GMV
         </h3>
         <span className="font-dm-sans text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
           {level}
@@ -46,16 +46,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
       {/* SVG Ring */}
       <div className="relative" style={{ width: 180, height: 180 }}>
         <svg width="180" height="180" className="rotate-[-90deg]">
-          {/* Track */}
-          <circle
-            cx="90"
-            cy="90"
-            r={radius}
-            fill="none"
-            stroke="#F3F4F6"
-            strokeWidth="12"
-          />
-          {/* Progress arc */}
+          <circle cx="90" cy="90" r={radius} fill="none" stroke="#F3F4F6" strokeWidth="12" />
           <circle
             cx="90"
             cy="90"
@@ -66,41 +57,35 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
-            style={{
-              transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
+            style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
           />
         </svg>
 
-        {/* Center text */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="font-dm-sans font-bold text-2xl text-brand-black leading-none">
             {formatEur(gmv)}
           </span>
           <span className="font-dm-sans text-xs text-gray-400 mt-1">
-            von {formatEur(target)}
+            of {formatEur(target)}
           </span>
         </div>
       </div>
 
-      {/* Progress label */}
       <div className="text-center">
         {nextLevel ? (
           <p className="font-dm-sans text-sm text-gray-600">
-            Noch{' '}
             <span className="font-semibold text-brand-green">
               {formatEur(Math.max(remaining, 0))}
             </span>{' '}
-            bis{' '}
+            more to reach{' '}
             <span className="font-semibold">{nextLevel}</span>
           </p>
         ) : (
           <p className="font-dm-sans text-sm text-amber-600 font-semibold">
-            🏆 Höchstes Level erreicht!
+            🏆 Highest level reached!
           </p>
         )}
 
-        {/* Progress bar */}
         <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5">
           <div
             className="h-1.5 rounded-full bg-brand-pink transition-all duration-1000"
@@ -108,7 +93,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
           />
         </div>
         <p className="text-xs text-gray-400 font-dm-sans mt-1">
-          {Math.round(progress * 100)}% zum nächsten Level
+          {Math.round(progress * 100)}% to next level
         </p>
       </div>
     </div>

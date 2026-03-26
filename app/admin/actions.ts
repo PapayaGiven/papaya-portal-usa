@@ -10,7 +10,7 @@ import { CreatorLevel, LEVEL_CONFIG } from '@/lib/types'
 
 export async function adminLogin(password: string): Promise<{ error?: string }> {
   if (password !== process.env.ADMIN_PASSWORD) {
-    return { error: 'Falsches Passwort.' }
+    return { error: 'Wrong password.' }
   }
   const cookieStore = await cookies()
   cookieStore.set('admin_session', 'valid', {
@@ -65,6 +65,20 @@ export async function updateCreatorLevel(id: string, level: CreatorLevel): Promi
   return {}
 }
 
+export async function updateCreatorPersonalGoal(id: string, goal: number): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+
+  const { error } = await supabase
+    .from('creators')
+    .update({ personal_gmv_goal: goal })
+    .eq('id', id)
+
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
 export async function toggleCreatorActive(id: string, isActive: boolean): Promise<void> {
   const supabase = createAdminClient()
   await supabase.from('creators').update({ is_active: isActive }).eq('id', id)
@@ -80,7 +94,7 @@ export async function addCreator(name: string, email: string): Promise<{ error?:
   const { error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
   })
-  if (authError) return { error: `Creator erstellt, aber Einladung fehlgeschlagen: ${authError.message}` }
+  if (authError) return { error: `Creator created, but invite failed: ${authError.message}` }
 
   revalidatePath('/admin')
   return {}
@@ -203,7 +217,7 @@ export async function deleteCampaign(id: string): Promise<void> {
   revalidatePath('/admin')
 }
 
-// ── Tasks ─────────────────────────────────────────────────────────────────────
+// ── Tasks (kept for data compatibility) ───────────────────────────────────────
 
 export async function assignTask(data: {
   creator_id: string
@@ -236,7 +250,7 @@ export async function bulkAssignTask(data: {
 
   if (creatorError) return { error: creatorError.message }
   if (!creators || creators.length === 0)
-    return { error: 'Keine aktiven Creator in diesem Level gefunden.' }
+    return { error: 'No active creators at this level.' }
 
   const today = new Date().toISOString().split('T')[0]
   const tasks = creators.map((c) => ({
@@ -252,6 +266,14 @@ export async function bulkAssignTask(data: {
 
   revalidatePath('/admin')
   return { count: tasks.length }
+}
+
+// ── Product Requests ──────────────────────────────────────────────────────────
+
+export async function updateProductRequestStatus(id: string, status: string): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase.from('product_requests').update({ status }).eq('id', id)
+  revalidatePath('/admin')
 }
 
 // ── Strategy ──────────────────────────────────────────────────────────────────
@@ -281,7 +303,6 @@ export async function saveStrategy(data: {
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
-  // Upsert strategy row
   const { data: strategy, error: stratError } = await supabase
     .from('strategies')
     .upsert({ creator_id: data.creator_id, month: data.month }, { onConflict: 'creator_id,month' })
@@ -290,10 +311,8 @@ export async function saveStrategy(data: {
 
   if (stratError) return { error: stratError.message }
 
-  // Delete existing products (cascade deletes videos)
   await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id)
 
-  // Insert products
   for (const p of data.products) {
     const { data: sp, error: spError } = await supabase
       .from('strategy_products')
@@ -314,7 +333,6 @@ export async function saveStrategy(data: {
 
     if (spError) return { error: spError.message }
 
-    // Insert videos for this product
     if (p.videos.length > 0) {
       const videos = p.videos
         .filter((v) => v.video_url.trim())
