@@ -1,4 +1,5 @@
 export type CreatorLevel = 'Initiation' | 'Rising' | 'Pro' | 'Elite'
+export type StrategyPriority = 'Hero' | 'Secondary' | 'Supporting'
 
 export interface Creator {
   id: string
@@ -64,6 +65,40 @@ export interface CampaignApplication {
   live_hours_offered: number | null
   price_offered: number | null
   created_at: string
+}
+
+export interface StrategyVideo {
+  id: string
+  strategy_product_id: string
+  video_url: string
+  thumbnail_url: string | null
+  created_at: string
+}
+
+export interface StrategyProduct {
+  id: string
+  strategy_id: string
+  product_id: string | null
+  priority: StrategyPriority
+  videos_per_day: number | null
+  live_hours_per_week: number | null
+  gmv_target: number | null
+  strategy_note: string | null
+  hashtags: string[]
+  is_retainer: boolean
+  campaign_id: string | null
+  created_at: string
+  product?: Product | null
+  campaign?: Campaign | null
+  videos?: StrategyVideo[]
+}
+
+export interface Strategy {
+  id: string
+  creator_id: string
+  month: string
+  created_at: string
+  products?: StrategyProduct[]
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {

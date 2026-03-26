@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
+import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
   addCreator, updateCreatorGMV, updateCreatorLevel, toggleCreatorActive, deleteCreator,
@@ -818,7 +819,7 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
 }
 
 // ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'tasks' | 'applications'
+type Tab = 'creators' | 'products' | 'campaigns' | 'tasks' | 'applications' | 'strategy'
 
 export default function AdminPanel({ creators, products, campaigns, todayTasks, applications }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
@@ -830,6 +831,7 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks, 
     { id: 'campaigns', label: 'Kampagnen', count: campaigns.length },
     { id: 'tasks', label: 'Aufgaben', count: todayTasks.length },
     { id: 'applications', label: 'Bewerbungen', count: applications.length },
+    { id: 'strategy', label: 'Estrategia' },
   ]
 
   return (
@@ -897,6 +899,7 @@ export default function AdminPanel({ creators, products, campaigns, todayTasks, 
           {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
           {activeTab === 'tasks' && <TasksTab creators={creators} products={products} todayTasks={todayTasks} />}
           {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
+          {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
         </div>
       </div>
     </div>

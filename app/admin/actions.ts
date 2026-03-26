@@ -253,3 +253,111 @@ export async function bulkAssignTask(data: {
   revalidatePath('/admin')
   return { count: tasks.length }
 }
+
+// ── Strategy ──────────────────────────────────────────────────────────────────
+
+export interface VideoInput {
+  video_url: string
+  thumbnail_url: string
+}
+
+export interface StrategyProductInput {
+  product_id: string
+  priority: string
+  videos_per_day: number | null
+  live_hours_per_week: number | null
+  gmv_target: number | null
+  strategy_note: string
+  hashtags: string[]
+  is_retainer: boolean
+  campaign_id: string | null
+  videos: VideoInput[]
+}
+
+export async function saveStrategy(data: {
+  creator_id: string
+  month: string
+  products: StrategyProductInput[]
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+
+  // Upsert strategy row
+  const { data: strategy, error: stratError } = await supabase
+    .from('strategies')
+    .upsert({ creator_id: data.creator_id, month: data.month }, { onConflict: 'creator_id,month' })
+    .select('id')
+    .single()
+
+  if (stratError) return { error: stratError.message }
+
+  // Delete existing products (cascade deletes videos)
+  await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id)
+
+  // Insert products
+  for (const p of data.products) {
+    const { data: sp, error: spError } = await supabase
+      .from('strategy_products')
+      .insert({
+        strategy_id: strategy.id,
+        product_id: p.product_id || null,
+        priority: p.priority,
+        videos_per_day: p.videos_per_day,
+        live_hours_per_week: p.live_hours_per_week,
+        gmv_target: p.gmv_target,
+        strategy_note: p.strategy_note,
+        hashtags: p.hashtags,
+        is_retainer: p.is_retainer,
+        campaign_id: p.campaign_id || null,
+      })
+      .select('id')
+      .single()
+
+    if (spError) return { error: spError.message }
+
+    // Insert videos for this product
+    if (p.videos.length > 0) {
+      const videos = p.videos
+        .filter((v) => v.video_url.trim())
+        .map((v) => ({
+          strategy_product_id: sp.id,
+          video_url: v.video_url,
+          thumbnail_url: v.thumbnail_url || null,
+        }))
+      if (videos.length > 0) {
+        const { error: vError } = await supabase.from('strategy_videos').insert(videos)
+        if (vError) return { error: vError.message }
+      }
+    }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/strategy')
+  return {}
+}
+
+export async function getStrategyForAdmin(
+  creatorId: string,
+  month: string
+): Promise<{ data?: { id: string; products: Record<string, unknown>[] } | null; error?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: strategy, error } = await supabase
+    .from('strategies')
+    .select('id')
+    .eq('creator_id', creatorId)
+    .eq('month', month)
+    .maybeSingle()
+
+  if (error) return { error: error.message }
+  if (!strategy) return { data: null }
+
+  const { data: products, error: pError } = await supabase
+    .from('strategy_products')
+    .select('*, videos:strategy_videos(*)')
+    .eq('strategy_id', strategy.id)
+    .order('created_at')
+
+  if (pError) return { error: pError.message }
+
+  return { data: { id: strategy.id, products: products ?? [] } }
+}

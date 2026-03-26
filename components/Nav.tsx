@@ -14,6 +14,7 @@ export default function Nav() {
 
   const links = [
     { href: '/dashboard', label: 'Dashboard' },
+    { href: '/strategy', label: 'My Strategy' },
     { href: '/progress', label: 'Progress' },
     { href: '/rewards', label: 'Rewards' },
   ]
