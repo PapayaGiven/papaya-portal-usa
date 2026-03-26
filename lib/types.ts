@@ -14,6 +14,10 @@ export interface Creator {
   hero_product_id: string | null
   is_active: boolean
   created_at: string
+  whatsapp_number: string | null
+  mastermind_date: string | null
+  account_manager_name: string | null
+  account_manager_whatsapp: string | null
 }
 
 export interface Product {
@@ -27,6 +31,7 @@ export interface Product {
   product_link: string | null
   tags: string[]
   created_at: string
+  approved_for_initiation: boolean
 }
 
 export interface Task {

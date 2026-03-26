@@ -72,10 +72,11 @@ export default async function RewardsPage() {
 
   const creator = creatorData as Pick<Creator, 'level' | 'gmv'> | null
   const currentLevelIndex = creator ? LEVELS.indexOf(creator.level) : 0
+  const level = creator?.level ?? null
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
-      <Nav />
+      <Nav level={level} />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-8 flex items-center gap-4">

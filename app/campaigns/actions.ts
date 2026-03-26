@@ -13,7 +13,7 @@ export async function submitCampaignApplication(data: {
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { error: 'Nicht angemeldet.' }
+  if (!user) return { error: 'Not logged in.' }
 
   const { data: creator } = await supabase
     .from('creators')
@@ -21,7 +21,7 @@ export async function submitCampaignApplication(data: {
     .eq('email', user.email!)
     .single()
 
-  if (!creator) return { error: 'Creator-Profil nicht gefunden.' }
+  if (!creator) return { error: 'Creator profile not found.' }
 
   const { error } = await supabase.from('campaign_applications').insert({
     campaign_id: data.campaign_id,

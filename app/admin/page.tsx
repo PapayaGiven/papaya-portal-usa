@@ -15,7 +15,7 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient()
 
-  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes] = await Promise.all([
+  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -36,6 +36,10 @@ export default async function AdminPage() {
       .from('product_requests')
       .select('*, creator:creators(name, email)')
       .order('created_at', { ascending: false }),
+    supabase
+      .from('creator_initiation_products')
+      .select('creator_id, product_id, product:products(name), creator:creators(name, email)')
+      .order('selected_at', { ascending: false }),
   ])
 
   return (
@@ -45,6 +49,8 @@ export default async function AdminPage() {
       campaigns={campaignsRes.data ?? []}
       applications={applicationsRes.data ?? []}
       productRequests={productRequestsRes.data ?? []}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      initiationSelections={(initiationSelectionsRes.data ?? []) as any}
     />
   )
 }

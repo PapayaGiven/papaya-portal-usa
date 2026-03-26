@@ -3,7 +3,8 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
 import DailyChecklist from '@/components/DailyChecklist'
-import { StrategyProduct } from '@/lib/types'
+import { StrategyProduct, CreatorLevel } from '@/lib/types'
+import { canSeeHashtags, canSeeExampleVideos } from '@/lib/levelAccess'
 
 const PRIORITY_STYLES = {
   Hero: { badge: 'bg-amber-100 text-amber-700 border border-amber-300', dot: 'bg-amber-400' },
@@ -63,6 +64,10 @@ export default async function StrategyPage() {
     .eq('email', user.email!)
     .single()
 
+  const level = (creator?.level ?? 'Initiation') as CreatorLevel
+  const showHashtags = canSeeHashtags(level)
+  const showVideos = canSeeExampleVideos(level)
+
   const now = new Date()
   const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
@@ -95,7 +100,6 @@ export default async function StrategyPage() {
 
       strategyProducts = (products ?? []) as StrategyProduct[]
 
-      // Fetch today's checklist entries
       const { data: checklist } = await supabase
         .from('daily_checklist')
         .select('strategy_product_id, video_posted, live_done')
@@ -112,7 +116,7 @@ export default async function StrategyPage() {
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
-      <Nav />
+      <Nav level={level} />
 
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
@@ -242,8 +246,8 @@ export default async function StrategyPage() {
                     </div>
                   )}
 
-                  {/* Hashtags */}
-                  {sp.hashtags && sp.hashtags.length > 0 && (
+                  {/* Hashtags — Pro+ only */}
+                  {showHashtags && sp.hashtags && sp.hashtags.length > 0 && (
                     <div className="px-6 py-4 border-b border-gray-50">
                       <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Hashtags</h3>
                       <div className="flex flex-wrap gap-2">
@@ -256,8 +260,8 @@ export default async function StrategyPage() {
                     </div>
                   )}
 
-                  {/* Example videos */}
-                  {sp.videos && sp.videos.length > 0 && (
+                  {/* Example videos — Pro+ only */}
+                  {showVideos && sp.videos && sp.videos.length > 0 && (
                     <div className="px-6 py-4">
                       <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Example Videos</h3>
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
@@ -265,6 +269,15 @@ export default async function StrategyPage() {
                           <VideoCard key={video.id} video={video} />
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Rising hint: hashtags/videos locked */}
+                  {!showHashtags && (sp.hashtags?.length ?? 0) > 0 && (
+                    <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50">
+                      <p className="font-dm-sans text-xs text-gray-400">
+                        🔒 Hashtags and example videos unlock at <strong>Pro</strong>.
+                      </p>
                     </div>
                   )}
                 </div>

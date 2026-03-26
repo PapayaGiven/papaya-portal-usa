@@ -7,8 +7,8 @@ import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator,
-  addProduct, updateProduct, deleteProduct, toggleProductExclusive,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings,
+  addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
 } from '@/app/admin/actions'
@@ -33,12 +33,20 @@ interface ProductRequestRow {
   creator: { name: string | null; email: string } | null
 }
 
+interface InitiationSelectionRow {
+  creator_id: string
+  product_id: string
+  product: { name: string } | null
+  creator: { name: string | null; email: string } | null
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
   campaigns: Campaign[]
   applications: ApplicationRow[]
   productRequests: ProductRequestRow[]
+  initiationSelections: InitiationSelectionRow[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Rising', 'Pro', 'Elite']
@@ -76,10 +84,22 @@ function Feedback({ msg }: { msg: string | null }) {
 function CreatorsTab({ creators, products: _products }: { creators: Creator[]; products: Product[] }) {
   const [editingGMV, setEditingGMV] = useState<{ id: string; value: string } | null>(null)
   const [editingGoal, setEditingGoal] = useState<{ id: string; value: string } | null>(null)
+  const [expandedElite, setExpandedElite] = useState<string | null>(null)
+  const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '' })
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  function openElite(c: Creator) {
+    setExpandedElite(c.id)
+    setEliteForm({
+      whatsapp_number: c.whatsapp_number ?? '',
+      mastermind_date: c.mastermind_date ? c.mastermind_date.slice(0, 16) : '',
+      account_manager_name: c.account_manager_name ?? '',
+      account_manager_whatsapp: c.account_manager_whatsapp ?? '',
+    })
+  }
 
   function fb(msg: string) {
     setFeedback(msg)
@@ -137,16 +157,17 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Status', 'Actions'].map((h) => (
+              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Status', 'Actions', 'Elite'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {creators.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
             )}
             {creators.map((c) => (
+              <>
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">{c.name || '–'}</td>
                 <td className="px-4 py-3 text-gray-500">{c.email}</td>
@@ -260,7 +281,76 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                     </button>
                   </div>
                 </td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => expandedElite === c.id ? setExpandedElite(null) : openElite(c)}
+                    className="text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-full transition"
+                  >
+                    {expandedElite === c.id ? 'Close' : 'Settings'}
+                  </button>
+                </td>
               </tr>
+              {expandedElite === c.id && (
+                <tr key={`${c.id}-elite`} className="bg-amber-50/50">
+                  <td colSpan={8} className="px-6 py-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
+                        <input
+                          placeholder="+49..."
+                          value={eliteForm.whatsapp_number}
+                          onChange={(e) => setEliteForm((f) => ({ ...f, whatsapp_number: e.target.value }))}
+                          className="input-field text-xs"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Mastermind date</p>
+                        <input
+                          type="datetime-local"
+                          value={eliteForm.mastermind_date}
+                          onChange={(e) => setEliteForm((f) => ({ ...f, mastermind_date: e.target.value }))}
+                          className="input-field text-xs"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Account manager name</p>
+                        <input
+                          placeholder="Name"
+                          value={eliteForm.account_manager_name}
+                          onChange={(e) => setEliteForm((f) => ({ ...f, account_manager_name: e.target.value }))}
+                          className="input-field text-xs"
+                        />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Manager WhatsApp</p>
+                        <input
+                          placeholder="+49..."
+                          value={eliteForm.account_manager_whatsapp}
+                          onChange={(e) => setEliteForm((f) => ({ ...f, account_manager_whatsapp: e.target.value }))}
+                          className="input-field text-xs"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      disabled={isPending}
+                      onClick={() => startTransition(async () => {
+                        const r = await updateCreatorEliteSettings(c.id, {
+                          whatsapp_number: eliteForm.whatsapp_number || null,
+                          mastermind_date: eliteForm.mastermind_date || null,
+                          account_manager_name: eliteForm.account_manager_name || null,
+                          account_manager_whatsapp: eliteForm.account_manager_whatsapp || null,
+                        })
+                        if (r.error) fb(`Error: ${r.error}`)
+                        else { fb('✓ Settings saved'); setExpandedElite(null) }
+                      })}
+                      className="font-dm-sans text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+                    >
+                      {isPending ? 'Saving...' : 'Save settings'}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              </>
             ))}
           </tbody>
         </table>
@@ -413,14 +503,14 @@ function ProductsTab({ products }: { products: Product[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Image', 'Name', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Actions'].map((h) => (
+              {['Image', 'Name', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Initiation', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {products.length === 0 && (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
             )}
             {products.map((p) => (
               <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -459,6 +549,15 @@ function ProductsTab({ products }: { products: Product[] }) {
                     className={`text-xs font-semibold px-2.5 py-1 rounded-full transition ${p.is_exclusive ? 'bg-brand-black text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
                   >
                     {p.is_exclusive ? 'Exclusive ✓' : 'Standard'}
+                  </button>
+                </td>
+                <td className="px-4 py-3">
+                  <button
+                    disabled={isPending}
+                    onClick={() => startTransition(async () => { await toggleProductInitiation(p.id, !p.approved_for_initiation); fb('✓ Saved') })}
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full transition ${p.approved_for_initiation ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    {p.approved_for_initiation ? '✓ Approved' : 'Off'}
                   </button>
                 </td>
                 <td className="px-4 py-3">
@@ -850,10 +949,52 @@ function SettingsTab() {
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'strategy' | 'settings'
+// ── Initiation Selections Tab ──────────────────────────────────────────────────
+function InitiationTab({ selections }: { selections: InitiationSelectionRow[] }) {
+  const grouped = selections.reduce<Record<string, InitiationSelectionRow[]>>((acc, s) => {
+    const key = s.creator?.email ?? s.creator_id
+    if (!acc[key]) acc[key] = []
+    acc[key].push(s)
+    return acc
+  }, {})
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests }: AdminPanelProps) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Initiation Product Selections</h2>
+        <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+          {Object.keys(grouped).length} creators
+        </span>
+      </div>
+      {Object.keys(grouped).length === 0 ? (
+        <p className="font-dm-sans text-sm text-gray-400 py-8 text-center">No selections yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(grouped).map(([email, rows]) => (
+            <div key={email} className="bg-gray-50 rounded-2xl border border-gray-100 p-4">
+              <p className="font-dm-sans font-semibold text-sm text-brand-black mb-2">
+                {rows[0]?.creator?.name || email}
+                <span className="font-normal text-gray-400 ml-2 text-xs">{email}</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {rows.map((r) => (
+                  <span key={r.product_id} className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-3 py-1 rounded-full border border-brand-pink/20">
+                    {r.product?.name ?? r.product_id}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'settings'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -863,6 +1004,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
     { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
     { id: 'applications', label: 'Applications', count: applications.length },
     { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
+    { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
     { id: 'strategy', label: 'Strategy' },
     { id: 'settings', label: 'Settings' },
   ]
@@ -932,6 +1074,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
           {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
           {activeTab === 'requests' && <RequestsTab productRequests={productRequests} />}
+          {activeTab === 'initiation' && <InitiationTab selections={initiationSelections} />}
           {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
           {activeTab === 'settings' && <SettingsTab />}
         </div>

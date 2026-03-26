@@ -3,39 +3,36 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import ApplicationForm from './ApplicationForm'
-import { Campaign, LEVEL_CONFIG } from '@/lib/types'
+import { Campaign, Creator, LEVEL_CONFIG } from '@/lib/types'
 
 export default async function CampaignDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: campaignData } = await supabase
-    .from('campaigns')
-    .select('*')
-    .eq('id', params.id)
-    .single()
+  const [campaignRes, creatorRes] = await Promise.all([
+    supabase.from('campaigns').select('*').eq('id', params.id).single(),
+    supabase.from('creators').select('level').eq('email', user.email!).single(),
+  ])
 
-  if (!campaignData) notFound()
+  if (!campaignRes.data) notFound()
 
-  const campaign = campaignData as Campaign
-
+  const campaign = campaignRes.data as Campaign
+  const creator = creatorRes.data as Pick<Creator, 'level'> | null
   const levelConfig = LEVEL_CONFIG[campaign.min_level]
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
-      <Nav />
+      <Nav level={creator?.level ?? null} />
 
       <main className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Back link */}
         <Link
-          href="/dashboard"
+          href="/campaigns"
           className="inline-flex items-center gap-1.5 font-dm-sans text-sm text-gray-400 hover:text-brand-green transition mb-6"
         >
-          ← Zurück zum Dashboard
+          ← Back to campaigns
         </Link>
 
         {/* Campaign card */}
@@ -75,17 +72,17 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               <p className="font-playfair text-2xl font-bold text-brand-pink">
                 {campaign.commission_rate}%
               </p>
-              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Provision</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Commission</p>
             </div>
             <div className="px-6 py-5 text-center">
               <p className="font-playfair text-2xl font-bold text-brand-black">
                 {campaign.spots_left ?? '∞'}
               </p>
-              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Plätze frei</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Spots left</p>
             </div>
             <div className="px-6 py-5 text-center">
               <p className="font-playfair text-2xl font-bold text-brand-green">
-                {campaign.budget ? `€${campaign.budget.toLocaleString('de-DE')}` : '–'}
+                {campaign.budget ? `€${campaign.budget.toLocaleString('en-DE')}` : '–'}
               </p>
               <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Budget</p>
             </div>
@@ -94,9 +91,9 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
                 className="inline-block font-dm-sans text-xs font-bold px-2.5 py-1 rounded-full text-white"
                 style={{ backgroundColor: levelConfig.color }}
               >
-                ab {campaign.min_level}
+                {campaign.min_level}+
               </span>
-              <p className="font-dm-sans text-xs text-gray-400 mt-1">Min. Level</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-1">Min. level</p>
             </div>
           </div>
 
@@ -105,7 +102,7 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
             <div className="px-8 py-3 bg-amber-50 border-t border-amber-100">
               <p className="font-dm-sans text-xs text-amber-700">
                 ⏱ Deadline:{' '}
-                {new Date(campaign.deadline).toLocaleDateString('de-DE', {
+                {new Date(campaign.deadline).toLocaleDateString('en-US', {
                   weekday: 'long',
                   day: '2-digit',
                   month: 'long',
@@ -126,24 +123,24 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition hover:opacity-90"
               style={{ backgroundColor: '#1B5E3B' }}
             >
-              Zum Showcase hinzufügen →
+              Add to showcase →
             </a>
           )}
           {campaign.sample_available && (
             <a
-              href={`mailto:team@papayasocialclub.de?subject=Sample-Anfrage: ${encodeURIComponent(campaign.brand_name)}`}
+              href={`mailto:team@papayasocialclub.de?subject=Sample request: ${encodeURIComponent(campaign.brand_name)}`}
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-brand-green border-2 border-brand-green hover:bg-brand-green/5 transition"
             >
-              Sample anfordern
+              Request sample
             </a>
           )}
         </div>
 
         {/* Interest form */}
         <div className="bg-white rounded-3xl border border-brand-pink/20 shadow-sm p-8">
-          <h2 className="font-playfair text-2xl text-brand-black mb-1">Ich bin dabei!</h2>
+          <h2 className="font-playfair text-2xl text-brand-black mb-1">I&apos;m in!</h2>
           <p className="font-dm-sans text-sm text-gray-500 mb-6">
-            Teile uns dein Angebot mit — wir melden uns schnell bei dir.
+            Tell us your offer — we&apos;ll get back to you quickly.
           </p>
           <ApplicationForm campaignId={campaign.id} />
         </div>

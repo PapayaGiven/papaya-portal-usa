@@ -80,11 +80,12 @@ export default async function ProgressPage() {
     .single()
 
   const creator = creatorData as Creator | null
+  const level = creator?.level ?? null
   const currentLevelIndex = creator ? getLevelIndex(creator.level) : 0
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
-      <Nav />
+      <Nav level={level} />
 
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-8 flex items-center gap-4">

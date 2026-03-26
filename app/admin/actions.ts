@@ -276,6 +276,34 @@ export async function updateProductRequestStatus(id: string, status: string): Pr
   revalidatePath('/admin')
 }
 
+// ── Initiation Products ────────────────────────────────────────────────────────
+
+export async function toggleProductInitiation(id: string, approved: boolean): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase.from('products').update({ approved_for_initiation: approved }).eq('id', id)
+  revalidatePath('/admin')
+  revalidatePath('/products')
+}
+
+// ── Creator Elite Settings ─────────────────────────────────────────────────────
+
+export async function updateCreatorEliteSettings(
+  id: string,
+  data: {
+    whatsapp_number?: string | null
+    mastermind_date?: string | null
+    account_manager_name?: string | null
+    account_manager_whatsapp?: string | null
+  }
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creators').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
 // ── Strategy ──────────────────────────────────────────────────────────────────
 
 export interface VideoInput {

@@ -5,19 +5,20 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { CreatorLevel } from '@/lib/types'
+import { getNavLinks } from '@/lib/levelAccess'
 
-export default function Nav() {
+interface NavProps {
+  level?: CreatorLevel | null
+}
+
+export default function Nav({ level }: NavProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
   const [signingOut, setSigningOut] = useState(false)
 
-  const links = [
-    { href: '/dashboard', label: 'Dashboard' },
-    { href: '/strategy', label: 'My Strategy' },
-    { href: '/progress', label: 'Progress' },
-    { href: '/rewards', label: 'Rewards' },
-  ]
+  const links = getNavLinks(level ?? null)
 
   async function handleSignOut() {
     setSigningOut(true)
@@ -64,8 +65,13 @@ export default function Nav() {
             })}
           </div>
 
-          {/* Sign out */}
+          {/* Right side: level badge + sign out */}
           <div className="flex items-center gap-3">
+            {level === 'Elite' && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 font-dm-sans text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
+                👑 Elite
+              </span>
+            )}
             <button
               onClick={handleSignOut}
               disabled={signingOut}
