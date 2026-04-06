@@ -92,33 +92,28 @@ function ConfirmForm() {
       }
 
       // Format 3: #access_token=xxx&refresh_token=yyy (hash/implicit flow)
-      // supabase-js auto-processes this — onAuthStateChange will fire
       if (hashStr && hashStr.includes('access_token')) {
-        console.log('[auth/confirm] Hash contains access_token — waiting for supabase-js auto-processing...')
+        const hashParams = new URLSearchParams(hashStr.replace('#', ''))
+        const accessToken = hashParams.get('access_token')
+        const refreshToken = hashParams.get('refresh_token')
+        const hashType = hashParams.get('type')
+        console.log('[auth/confirm] Hash token detected — type:', hashType, 'accessToken:', !!accessToken, 'refreshToken:', !!refreshToken)
 
-        // Fallback: if auto-processing doesn't fire within 5s, try manual setSession
-        setTimeout(async () => {
-          if (resolved.current) return
-          console.warn('[auth/confirm] Auto-processing timed out after 5s, trying manual setSession')
-          const hashParams = new URLSearchParams(hashStr.replace('#', ''))
-          const accessToken = hashParams.get('access_token')
-          const refreshToken = hashParams.get('refresh_token')
-          console.log('[auth/confirm] Manual hash parse — accessToken:', !!accessToken, 'refreshToken:', !!refreshToken)
-
-          if (accessToken && refreshToken) {
-            const { data, error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            })
-            console.log('[auth/confirm] Manual setSession result — session:', !!data?.session, 'error:', error?.message)
-            if (error) {
-              done(false, `No se pudo establecer la sesión: ${error.message}`)
-            }
-            // Success caught by onAuthStateChange
-          } else {
-            done(false, 'Enlace de invitación incompleto. Por favor solicita una nueva invitación.')
+        if (accessToken && refreshToken) {
+          console.log('[auth/confirm] Step 2: setSession from hash tokens')
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          })
+          console.log('[auth/confirm] setSession result — session:', !!data?.session, 'user:', data?.user?.email, 'error:', error?.message)
+          if (error) {
+            done(false, `No se pudo establecer la sesión: ${error.message}`)
+          } else if (data?.session) {
+            done(true)
           }
-        }, 5000)
+        } else {
+          done(false, 'Enlace de invitación incompleto. Por favor solicita una nueva invitación.')
+        }
         return
       }
 

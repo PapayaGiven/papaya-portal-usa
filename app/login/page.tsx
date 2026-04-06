@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -11,6 +11,15 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+
+  // Detect invite tokens in hash and redirect to /auth/confirm
+  useEffect(() => {
+    const hash = window.location.hash
+    if (hash && hash.includes('type=invite')) {
+      console.log('[login] Invite token detected in hash, redirecting to /auth/confirm')
+      router.replace('/auth/confirm' + hash)
+    }
+  }, [router])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
