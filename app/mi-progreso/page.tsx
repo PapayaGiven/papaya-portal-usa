@@ -74,10 +74,18 @@ export default async function MiProgresoPage() {
   const { data: rewardsData } = await supabase
     .from('rewards')
     .select('*')
-    .order('level_name')
+    .eq('is_active', true)
     .order('order_index')
 
-  const rewards = (rewardsData ?? []) as Reward[]
+  // Deduplicate rewards by id
+  const seenIds = new Set<string>()
+  const rewards: Reward[] = []
+  for (const r of (rewardsData ?? []) as Reward[]) {
+    if (!seenIds.has(r.id)) {
+      seenIds.add(r.id)
+      rewards.push(r)
+    }
+  }
 
   const { data: creatorRewardsData } = await supabase
     .from('creator_rewards')
@@ -177,7 +185,7 @@ export default async function MiProgresoPage() {
                           )}
                           {isFuture && (
                             <span className="font-dm-sans text-xs font-medium text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
-                              🔒 Bloqueado
+                              🔒 Disponible cuando alcances ${lvl.gmv_min.toLocaleString('en-US')} GMV
                             </span>
                           )}
                         </div>
@@ -203,7 +211,7 @@ export default async function MiProgresoPage() {
                       {lvl.includes.map((item, i) => (
                         <li key={i} className="flex items-start gap-2">
                           <span className={`mt-0.5 shrink-0 text-sm ${isFuture ? 'text-gray-300' : 'text-emerald-500'}`}>
-                            {isFuture ? '○' : '✓'}
+                            {isFuture ? '🔒' : '✓'}
                           </span>
                           <span className={`font-dm-sans text-sm ${isFuture ? 'text-gray-400' : 'text-gray-700'}`}>{item}</span>
                         </li>
@@ -211,8 +219,8 @@ export default async function MiProgresoPage() {
                     </ul>
                   )}
 
-                  {/* Excludes list */}
-                  {lvl.excludes && lvl.excludes.length > 0 && (
+                  {/* Excludes list — only show for current and past levels */}
+                  {!isFuture && lvl.excludes && lvl.excludes.length > 0 && (
                     <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5">
                       {lvl.excludes.map((item, i) => (
                         <li key={i} className="flex items-start gap-2">
@@ -223,11 +231,27 @@ export default async function MiProgresoPage() {
                     </ul>
                   )}
 
+                  {/* Progress bar toward unlocking this level */}
+                  {isFuture && (
+                    <div className="mt-4 bg-gray-50 rounded-xl p-3">
+                      <div className="flex justify-between mb-1.5">
+                        <span className="font-dm-sans text-xs text-gray-400">Tu GMV actual: ${creator.gmv.toLocaleString('en-US')}</span>
+                        <span className="font-dm-sans text-xs text-gray-400">${lvl.gmv_min.toLocaleString('en-US')} para desbloquear</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gray-400 transition-all duration-700"
+                          style={{ width: `${Math.min((creator.gmv / lvl.gmv_min) * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Rewards section */}
                   {levelRewards.length > 0 && (
                     <div className="mt-5 pt-4 border-t border-gray-100">
                       <h3 className={`font-dm-sans text-xs font-semibold uppercase tracking-wider mb-3 ${isFuture ? 'text-gray-300' : 'text-gray-400'}`}>
-                        Recompensas
+                        {isFuture ? `Desbloquea estas recompensas cuando llegues a ${lvl.name}` : 'Recompensas'}
                       </h3>
                       <div className="space-y-3">
                         {levelRewards.map((reward) => {
@@ -250,16 +274,22 @@ export default async function MiProgresoPage() {
                                   </p>
                                 )}
                                 <div className="mt-2">
-                                  <RewardCTA
-                                    rewardId={reward.id}
-                                    ctaType={reward.cta_type}
-                                    ctaText={reward.cta_text}
-                                    ctaUrl={reward.cta_url}
-                                    requiresAddress={reward.requires_address}
-                                    isClaimed={claimed}
-                                    isLocked={isLocked}
-                                    accountManagerWhatsapp={creator.account_manager_whatsapp}
-                                  />
+                                  {isFuture ? (
+                                    <span className="inline-block font-dm-sans text-xs font-medium text-gray-400 bg-gray-100 px-3 py-1.5 rounded-lg">
+                                      🔒 Bloqueado
+                                    </span>
+                                  ) : (
+                                    <RewardCTA
+                                      rewardId={reward.id}
+                                      ctaType={reward.cta_type}
+                                      ctaText={reward.cta_text}
+                                      ctaUrl={reward.cta_url}
+                                      requiresAddress={reward.requires_address}
+                                      isClaimed={claimed}
+                                      isLocked={isLocked}
+                                      accountManagerWhatsapp={creator.account_manager_whatsapp}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             </div>

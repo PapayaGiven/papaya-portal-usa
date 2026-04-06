@@ -40,7 +40,6 @@ export function getNavLinks(level: CreatorLevel | null): { href: string; label: 
     { href: '/strategy', label: 'Mi Estrategia' },
     { href: '/products', label: 'Productos' },
     { href: '/campaigns', label: 'Campañas' },
-    { href: '/leaderboard', label: 'Ranking' },
     { href: '/mi-progreso', label: 'Mi Progreso' },
     { href: '/violations', label: 'Violaciones' },
   ]
