@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -15,120 +15,158 @@ function ConfirmForm() {
   const [loading, setLoading] = useState(false)
   const [exchanging, setExchanging] = useState(true)
   const [sessionReady, setSessionReady] = useState(false)
+  const resolved = useRef(false)
 
   useEffect(() => {
-    async function handleToken() {
-      const supabase = createClient()
+    const supabase = createClient()
 
-      // Log all URL info for debugging
-      const allParams: Record<string, string> = {}
-      searchParams.forEach((value, key) => { allParams[key] = value })
-      const hashStr = typeof window !== 'undefined' ? window.location.hash : ''
-      const fullUrl = typeof window !== 'undefined' ? window.location.href : ''
+    // ── Step 1: Log everything ──────────────────────────────────
+    const fullUrl = window.location.href
+    const hashStr = window.location.hash
+    const allParams: Record<string, string> = {}
+    searchParams.forEach((v, k) => { allParams[k] = v })
 
-      console.log('[auth/confirm] Full URL:', fullUrl)
-      console.log('[auth/confirm] Search params:', allParams)
-      console.log('[auth/confirm] Hash:', hashStr)
+    console.log('[auth/confirm] ===== PAGE LOAD =====')
+    console.log('[auth/confirm] Full URL:', fullUrl)
+    console.log('[auth/confirm] Search params:', JSON.stringify(allParams))
+    console.log('[auth/confirm] Hash fragment:', hashStr)
+    console.log('[auth/confirm] Hash length:', hashStr.length)
 
-      setDebugInfo(JSON.stringify({ params: allParams, hash: hashStr }, null, 2))
+    setDebugInfo(JSON.stringify({ url: fullUrl, params: allParams, hash: hashStr }, null, 2))
 
-      const tokenHash = searchParams.get('token_hash')
-      const token = searchParams.get('token')
-      const type = searchParams.get('type') as 'invite' | 'email' | null
-
-      // Format 1: ?token_hash=xxx&type=invite  (current Supabase invite format)
-      if (tokenHash && (type === 'invite' || type === 'email')) {
-        console.log('[auth/confirm] Using verifyOtp with token_hash')
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: type,
-        })
-        if (error) {
-          console.error('[auth/confirm] verifyOtp error:', error)
-          setError(`Enlace de invitación no válido: ${error.message}`)
-        } else {
-          console.log('[auth/confirm] verifyOtp success')
-          setSessionReady(true)
-        }
-        setExchanging(false)
-        return
-      }
-
-      // Format 2: ?token=xxx&type=invite  (older Supabase format)
-      if (token && (type === 'invite' || type === 'email')) {
-        console.log('[auth/confirm] Using verifyOtp with token (older format)')
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: token,
-          type: type,
-        })
-        if (error) {
-          console.error('[auth/confirm] verifyOtp (token) error:', error)
-          setError(`Enlace de invitación no válido: ${error.message}`)
-        } else {
-          console.log('[auth/confirm] verifyOtp (token) success')
-          setSessionReady(true)
-        }
-        setExchanging(false)
-        return
-      }
-
-      // Format 3: #access_token=xxx&refresh_token=yyy  (hash/fragment format)
-      if (hashStr) {
-        const hashParams = new URLSearchParams(hashStr.replace('#', ''))
-        const accessToken = hashParams.get('access_token')
-        const refreshToken = hashParams.get('refresh_token')
-        console.log('[auth/confirm] Hash params:', { accessToken: !!accessToken, refreshToken: !!refreshToken })
-
-        if (accessToken && refreshToken) {
-          console.log('[auth/confirm] Setting session from hash tokens')
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          })
-          if (error) {
-            console.error('[auth/confirm] setSession error:', error)
-            setError(`No se pudo establecer la sesión: ${error.message}`)
-          } else {
-            console.log('[auth/confirm] setSession success')
-            setSessionReady(true)
-          }
-          setExchanging(false)
-          return
-        }
-      }
-
-      // Format 4: ?code=xxx  (PKCE code exchange)
-      const code = searchParams.get('code')
-      if (code) {
-        console.log('[auth/confirm] Using exchangeCodeForSession with code')
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (error) {
-          console.error('[auth/confirm] exchangeCodeForSession error:', error)
-          setError(`Error en el intercambio de código: ${error.message}`)
-        } else {
-          console.log('[auth/confirm] exchangeCodeForSession success')
-          setSessionReady(true)
-        }
-        setExchanging(false)
-        return
-      }
-
-      // No token found — check if there's already an active session
-      console.log('[auth/confirm] No token found, checking existing session')
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session) {
-        console.log('[auth/confirm] Existing session found')
-        setSessionReady(true)
-      } else {
-        console.warn('[auth/confirm] No token and no session — link may be invalid')
-        setError('No se encontró un enlace de invitación válido. Por favor solicita una nueva invitación.')
-      }
+    function done(ready: boolean, err?: string) {
+      if (resolved.current) return
+      resolved.current = true
+      console.log('[auth/confirm] ===== RESOLVED =====', ready ? 'SESSION READY' : 'FAILED', err || '')
+      if (err) setError(err)
+      setSessionReady(ready)
       setExchanging(false)
     }
 
-    handleToken()
+    // ── Listen for auth state changes ────────────────────────────
+    // This catches hash fragment auto-processing by supabase-js
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[auth/confirm] onAuthStateChange:', event, 'hasSession:', !!session, 'user:', session?.user?.email)
+      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+        console.log('[auth/confirm] Session established via auth event:', event)
+        done(true)
+      }
+    })
+
+    // ── Step 2: Exchange token for session ───────────────────────
+    async function handleToken() {
+      const tokenHash = searchParams.get('token_hash')
+      const token = searchParams.get('token')
+      const type = searchParams.get('type')
+      const code = searchParams.get('code')
+
+      console.log('[auth/confirm] Parsed params — token_hash:', !!tokenHash, 'token:', !!token, 'type:', type, 'code:', !!code)
+
+      // Format 1: ?token_hash=xxx&type=invite (current Supabase format)
+      if (tokenHash && (type === 'invite' || type === 'email')) {
+        console.log('[auth/confirm] Step 2: verifyOtp with token_hash, type:', type)
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as 'invite',
+        })
+        console.log('[auth/confirm] verifyOtp result — session:', !!data?.session, 'user:', data?.user?.email, 'error:', error?.message)
+        if (error) {
+          done(false, `Enlace de invitación no válido: ${error.message}`)
+        }
+        // Success is caught by onAuthStateChange
+        return
+      }
+
+      // Format 2: ?token=xxx&type=invite (older Supabase format)
+      if (token && (type === 'invite' || type === 'email')) {
+        console.log('[auth/confirm] Step 2: verifyOtp with token (legacy), type:', type)
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: type as 'invite',
+        })
+        console.log('[auth/confirm] verifyOtp (legacy) result — session:', !!data?.session, 'user:', data?.user?.email, 'error:', error?.message)
+        if (error) {
+          done(false, `Enlace de invitación no válido: ${error.message}`)
+        }
+        return
+      }
+
+      // Format 3: #access_token=xxx&refresh_token=yyy (hash/implicit flow)
+      // supabase-js auto-processes this — onAuthStateChange will fire
+      if (hashStr && hashStr.includes('access_token')) {
+        console.log('[auth/confirm] Hash contains access_token — waiting for supabase-js auto-processing...')
+
+        // Fallback: if auto-processing doesn't fire within 5s, try manual setSession
+        setTimeout(async () => {
+          if (resolved.current) return
+          console.warn('[auth/confirm] Auto-processing timed out after 5s, trying manual setSession')
+          const hashParams = new URLSearchParams(hashStr.replace('#', ''))
+          const accessToken = hashParams.get('access_token')
+          const refreshToken = hashParams.get('refresh_token')
+          console.log('[auth/confirm] Manual hash parse — accessToken:', !!accessToken, 'refreshToken:', !!refreshToken)
+
+          if (accessToken && refreshToken) {
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            })
+            console.log('[auth/confirm] Manual setSession result — session:', !!data?.session, 'error:', error?.message)
+            if (error) {
+              done(false, `No se pudo establecer la sesión: ${error.message}`)
+            }
+            // Success caught by onAuthStateChange
+          } else {
+            done(false, 'Enlace de invitación incompleto. Por favor solicita una nueva invitación.')
+          }
+        }, 5000)
+        return
+      }
+
+      // Format 4: ?code=xxx (PKCE code exchange)
+      if (code) {
+        console.log('[auth/confirm] Step 2: exchangeCodeForSession with code')
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+        console.log('[auth/confirm] exchangeCodeForSession result — session:', !!data?.session, 'error:', error?.message)
+        if (error) {
+          done(false, `Error en el intercambio de código: ${error.message}`)
+        }
+        return
+      }
+
+      // No token found — check if there's already a session
+      console.log('[auth/confirm] No token found, checking existing session...')
+      const { data: { session } } = await supabase.auth.getSession()
+      console.log('[auth/confirm] Existing session check:', !!session, 'user:', session?.user?.email)
+      if (session) {
+        done(true)
+      } else {
+        done(false, 'No se encontró un enlace de invitación válido. Por favor solicita una nueva invitación.')
+      }
+    }
+
+    // Small delay to let onAuthStateChange fire first for hash tokens
+    const startTimer = setTimeout(() => {
+      if (!resolved.current) {
+        handleToken()
+      }
+    }, 300)
+
+    // Global timeout fallback
+    const timeout = setTimeout(() => {
+      if (!resolved.current) {
+        console.error('[auth/confirm] Global timeout reached (20s)')
+        done(false, 'La confirmación tardó demasiado. Por favor intenta de nuevo o solicita una nueva invitación.')
+      }
+    }, 20000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(startTimer)
+      clearTimeout(timeout)
+    }
   }, [searchParams])
 
+  // ── Step 3: Set password ──────────────────────────────────────
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (password !== confirmPassword) {
@@ -144,6 +182,19 @@ function ConfirmForm() {
     setError(null)
 
     const supabase = createClient()
+
+    // Verify we still have a session before updating
+    const { data: { session } } = await supabase.auth.getSession()
+    console.log('[auth/confirm] Step 3: Pre-update session check:', !!session, 'user:', session?.user?.email)
+
+    if (!session) {
+      console.error('[auth/confirm] No session when trying to set password')
+      setError('Sesión expirada. Por favor solicita una nueva invitación.')
+      setLoading(false)
+      return
+    }
+
+    console.log('[auth/confirm] Step 3: Calling updateUser to set password')
     const { error: updateError } = await supabase.auth.updateUser({ password })
 
     if (updateError) {
@@ -153,7 +204,8 @@ function ConfirmForm() {
       return
     }
 
-    console.log('[auth/confirm] Password set successfully, redirecting')
+    // ── Step 4: Redirect to dashboard ─────────────────────────────
+    console.log('[auth/confirm] Step 4: Password set successfully, redirecting to /dashboard')
     router.push('/dashboard')
     router.refresh()
   }
@@ -194,13 +246,13 @@ function ConfirmForm() {
             )}
           </div>
 
-          {/* Show error state (no session) */}
+          {/* Error state */}
           {!sessionReady && error && (
             <div className="space-y-4">
               <div className="bg-brand-pink/10 border border-brand-pink/30 rounded-xl px-4 py-3">
                 <p className="text-sm font-dm-sans text-rose-600">{error}</p>
               </div>
-              {process.env.NODE_ENV !== 'production' && debugInfo && (
+              {debugInfo && (
                 <details className="text-left">
                   <summary className="font-dm-sans text-xs text-gray-400 cursor-pointer">Debug info</summary>
                   <pre className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 mt-2 overflow-auto">{debugInfo}</pre>
@@ -212,14 +264,11 @@ function ConfirmForm() {
             </div>
           )}
 
-          {/* Password form (session ready) */}
+          {/* Password form */}
           {sessionReady && (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5"
-                >
+                <label htmlFor="password" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">
                   Nueva contraseña
                 </label>
                 <input
@@ -235,10 +284,7 @@ function ConfirmForm() {
               </div>
 
               <div>
-                <label
-                  htmlFor="confirmPassword"
-                  className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5"
-                >
+                <label htmlFor="confirmPassword" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">
                   Confirmar contraseña
                 </label>
                 <input
