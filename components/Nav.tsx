@@ -77,14 +77,14 @@ export default function Nav({ level }: NavProps) {
               disabled={signingOut}
               className="hidden md:block font-dm-sans text-sm text-gray-500 hover:text-brand-green transition-colors px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50"
             >
-              {signingOut ? 'Signing out...' : 'Sign out'}
+              {signingOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
             </button>
 
             {/* Mobile hamburger */}
             <button
               className="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
               onClick={() => setMenuOpen(!menuOpen)}
-              aria-label="Open menu"
+              aria-label="Abrir menú"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 {menuOpen ? (
@@ -132,7 +132,7 @@ export default function Nav({ level }: NavProps) {
             disabled={signingOut}
             className="block w-full text-left px-4 py-2.5 font-dm-sans text-sm text-gray-500 hover:text-brand-green transition-colors rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >
-            {signingOut ? 'Signing out...' : 'Sign out'}
+            {signingOut ? 'Cerrando sesión...' : 'Cerrar sesión'}
           </button>
         </div>
       )}

@@ -130,6 +130,6 @@ export interface ProductRequest {
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {
   Initiation: { min: 0, max: 299, target: 300, color: '#9CA3AF', next: 'Rising' },
   Rising:     { min: 300, max: 999, target: 1000, color: '#F4A7C3', next: 'Pro' },
-  Pro:        { min: 1000, max: 4999, target: 5000, color: '#1B5E3B', next: 'Elite' },
-  Elite:      { min: 5000, max: Infinity, target: null, color: '#F59E0B', next: null },
+  Pro:        { min: 1000, max: 9999, target: 10000, color: '#1B5E3B', next: 'Elite' },
+  Elite:      { min: 10000, max: Infinity, target: null, color: '#F59E0B', next: null },
 }

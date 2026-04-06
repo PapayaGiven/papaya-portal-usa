@@ -42,7 +42,7 @@ function VideoCard({ video }: { video: { id: string; video_url: string; thumbnai
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
-          <p className="font-dm-sans text-xs text-gray-400">Watch on TikTok</p>
+          <p className="font-dm-sans text-xs text-gray-400">Ver en TikTok</p>
         </div>
       )}
       <div className="px-3 py-2 bg-white">
@@ -128,7 +128,7 @@ export default async function StrategyPage() {
             height={48}
           />
           <div>
-            <h1 className="font-playfair text-4xl text-brand-black mb-1">My Strategy</h1>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Mi Estrategia</h1>
             <p className="font-dm-sans text-sm text-gray-500">{monthLabel}</p>
           </div>
         </div>
@@ -154,10 +154,10 @@ export default async function StrategyPage() {
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
             <p className="text-4xl mb-3">📋</p>
             <h2 className="font-playfair text-2xl text-brand-black mb-2">
-              No strategy yet for {monthLabel}
+              Aún no hay estrategia para {monthLabel}
             </h2>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Your agency will create your monthly strategy soon.
+              Tu agencia creará tu estrategia mensual pronto.
             </p>
           </div>
         ) : (
@@ -197,7 +197,7 @@ export default async function StrategyPage() {
                           )}
                           {product?.commission_rate != null && (
                             <span className="font-dm-sans text-xs font-bold text-brand-pink">
-                              {product.commission_rate}% Commission
+                              {product.commission_rate}% Comisión
                             </span>
                           )}
                         </div>
@@ -211,7 +211,7 @@ export default async function StrategyPage() {
                       {sp.is_retainer && (
                         <span className="font-dm-sans text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                          Retainer Campaign
+                          Campaña Retainer
                         </span>
                       )}
                       {campaign && (
@@ -224,24 +224,24 @@ export default async function StrategyPage() {
                   <div className="grid grid-cols-3 divide-x divide-gray-50 border-b border-gray-50">
                     <div className="px-5 py-4 text-center">
                       <p className="font-playfair text-2xl font-bold text-brand-black">{sp.videos_per_day ?? '–'}</p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Day</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Día</p>
                     </div>
                     <div className="px-5 py-4 text-center">
                       <p className="font-playfair text-2xl font-bold text-brand-black">{sp.live_hours_per_week ?? '–'}h</p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Week</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Semana</p>
                     </div>
                     <div className="px-5 py-4 text-center">
                       <p className="font-playfair text-2xl font-bold text-brand-green">
-                        {sp.gmv_target != null ? `€${Number(sp.gmv_target).toLocaleString('en-DE')}` : '–'}
+                        {sp.gmv_target != null ? `$${Number(sp.gmv_target).toLocaleString('en-US')}` : '–'}
                       </p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">GMV Target</p>
+                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Meta GMV</p>
                     </div>
                   </div>
 
                   {/* Strategy note */}
                   {sp.strategy_note && (
                     <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Strategy</h3>
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Estrategia</h3>
                       <p className="font-dm-sans text-sm text-gray-700 leading-relaxed whitespace-pre-line">{sp.strategy_note}</p>
                     </div>
                   )}
@@ -263,7 +263,7 @@ export default async function StrategyPage() {
                   {/* Example videos — Pro+ only */}
                   {showVideos && sp.videos && sp.videos.length > 0 && (
                     <div className="px-6 py-4">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Example Videos</h3>
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Videos de ejemplo</h3>
                       <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                         {sp.videos.map((video) => (
                           <VideoCard key={video.id} video={video} />
@@ -276,7 +276,7 @@ export default async function StrategyPage() {
                   {!showHashtags && (sp.hashtags?.length ?? 0) > 0 && (
                     <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50">
                       <p className="font-dm-sans text-xs text-gray-400">
-                        🔒 Hashtags and example videos unlock at <strong>Pro</strong>.
+                        🔒 Hashtags y videos de ejemplo se desbloquean en <strong>Pro</strong>.
                       </p>
                     </div>
                   )}

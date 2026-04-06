@@ -26,14 +26,14 @@ export default function AdminLogin() {
             Papaya Social Club
           </p>
           <h1 className="font-playfair text-3xl text-white mb-1">Admin Panel</h1>
-          <p className="font-dm-sans text-white/40 text-sm mb-8">Nur für das Papaya-Team.</p>
+          <p className="font-dm-sans text-white/40 text-sm mb-8">Solo para el equipo Papaya.</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Admin-Passwort"
+              placeholder="Contraseña de admin"
               required
               autoFocus
               className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/30 font-dm-sans text-sm focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink transition"
@@ -50,7 +50,7 @@ export default function AdminLogin() {
               disabled={isPending}
               className="w-full py-3 rounded-xl font-dm-sans font-semibold text-sm text-brand-black bg-brand-pink hover:bg-brand-pink/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isPending ? 'Einloggen...' : 'Einloggen →'}
+              {isPending ? 'Iniciando sesión...' : 'Iniciar sesión →'}
             </button>
           </form>
         </div>

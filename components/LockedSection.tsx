@@ -19,17 +19,17 @@ export default function LockedSection({ unlockAt, children, className = '' }: Lo
             <span className="text-xl">🔒</span>
           </div>
           <p className="font-dm-sans font-semibold text-brand-black text-sm mb-1">
-            Unlocks at {unlockAt}
+            Se desbloquea en {unlockAt}
           </p>
           <p className="font-dm-sans text-xs text-gray-400 mb-4">
-            Keep growing your GMV to reach this level.
+            Sigue creciendo tu GMV para alcanzar este nivel.
           </p>
           <Link
             href="/progress"
             className="inline-block font-dm-sans text-xs font-semibold text-white px-4 py-2 rounded-xl transition hover:opacity-90"
             style={{ backgroundColor: '#1B5E3B' }}
           >
-            View my progress →
+            Ver mi progreso →
           </Link>
         </div>
       </div>

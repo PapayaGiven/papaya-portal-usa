@@ -62,7 +62,7 @@ export default function SmartBanner({ banner }: SmartBannerProps) {
       <button
         onClick={() => setDismissed(true)}
         className={`shrink-0 mt-0.5 transition-colors ${styles.close}`}
-        aria-label="Banner schließen"
+        aria-label="Cerrar banner"
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path

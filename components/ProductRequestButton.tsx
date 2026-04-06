@@ -22,7 +22,7 @@ export default function ProductRequestButton() {
       if (result.error) {
         setFeedback({ type: 'error', msg: result.error })
       } else {
-        setFeedback({ type: 'success', msg: 'Request submitted! We will review it soon.' })
+        setFeedback({ type: 'success', msg: '¡Solicitud enviada! La revisaremos pronto.' })
         setForm({ product_name: '', brand_name: '', reason: '' })
         setTimeout(() => handleClose(), 2000)
       }
@@ -35,7 +35,7 @@ export default function ProductRequestButton() {
         onClick={() => setOpen(true)}
         className="font-dm-sans text-sm font-semibold border-2 border-dashed border-brand-pink/40 text-brand-pink hover:border-brand-pink hover:bg-brand-pink/5 px-4 py-1.5 rounded-xl transition"
       >
-        + Request a product
+        + Solicitar un producto
       </button>
 
       {open && (
@@ -43,7 +43,7 @@ export default function ProductRequestButton() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
           <div className="relative bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="font-playfair text-2xl text-brand-black">Request a Product</h2>
+              <h2 className="font-playfair text-2xl text-brand-black">Solicitar un producto</h2>
               <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 p-1">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -53,17 +53,17 @@ export default function ProductRequestButton() {
 
             <div className="space-y-3">
               <div>
-                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Product name *</label>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre del producto *</label>
                 <input
                   type="text"
-                  placeholder="e.g. Vitamin C Serum"
+                  placeholder="ej. Sérum de Vitamina C"
                   value={form.product_name}
                   onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))}
                   className="input-field w-full"
                 />
               </div>
               <div>
-                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Brand name *</label>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre de la marca *</label>
                 <input
                   type="text"
                   placeholder="e.g. The Ordinary"
@@ -73,10 +73,10 @@ export default function ProductRequestButton() {
                 />
               </div>
               <div>
-                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Why do you think it converts?</label>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">¿Por qué crees que convierte?</label>
                 <textarea
                   rows={3}
-                  placeholder="Tell us why this product would perform well on your TikTok..."
+                  placeholder="Cuéntanos por qué este producto funcionaría bien en tu TikTok..."
                   value={form.reason}
                   onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
                   className="input-field w-full resize-none"
@@ -95,14 +95,14 @@ export default function ProductRequestButton() {
                 onClick={handleClose}
                 className="flex-1 font-dm-sans text-sm font-medium text-gray-500 border border-gray-200 px-4 py-2.5 rounded-xl hover:bg-gray-50 transition"
               >
-                Cancel
+                Cancelar
               </button>
               <button
                 disabled={isPending || !form.product_name || !form.brand_name}
                 onClick={handleSubmit}
                 className="flex-1 font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
               >
-                {isPending ? 'Sending...' : 'Submit request'}
+                {isPending ? 'Enviando...' : 'Enviar solicitud'}
               </button>
             </div>
           </div>

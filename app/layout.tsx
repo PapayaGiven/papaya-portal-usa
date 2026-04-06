@@ -16,7 +16,7 @@ const dmSans = DM_Sans({
 
 export const metadata: Metadata = {
   title: 'Papaya Social Club',
-  description: 'Private Members Portal for TikTok Creators in Germany',
+  description: 'La comunidad #1 de latinas en TikTok Shop',
 }
 
 export default function RootLayout({
@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="de" className={`${playfair.variable} ${dmSans.variable}`}>
+    <html lang="es" className={`${playfair.variable} ${dmSans.variable}`}>
       <body className="font-dm-sans antialiased bg-brand-light-pink min-h-screen">
         {children}
       </body>

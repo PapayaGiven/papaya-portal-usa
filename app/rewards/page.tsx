@@ -13,46 +13,46 @@ interface Reward {
 const REWARDS: Record<CreatorLevel, { color: string; gmvRange: string; emoji: string; rewards: Reward[] }> = {
   Initiation: {
     color: '#9CA3AF',
-    gmvRange: '€0 – €299',
+    gmvRange: '$0 – $299',
     emoji: '🌱',
     rewards: [
-      { emoji: '📦', title: 'Welcome package', description: 'Your Papaya starter kit with everything you need.' },
-      { emoji: '💬', title: 'Community access', description: 'Access to the exclusive creator community.' },
-      { emoji: '📊', title: 'Creator dashboard', description: 'Your personal dashboard for tracking progress.' },
-      { emoji: '📩', title: 'Weekly newsletter', description: 'Tips, trends and new product info straight to your inbox.' },
+      { emoji: '📦', title: 'Paquete de bienvenida', description: 'Tu kit de inicio Papaya con todo lo que necesitas.' },
+      { emoji: '💬', title: 'Acceso a la comunidad', description: 'Acceso a la comunidad exclusiva de creadoras.' },
+      { emoji: '📊', title: 'Dashboard de creadora', description: 'Tu dashboard personal para seguir tu progreso.' },
+      { emoji: '📩', title: 'Newsletter semanal', description: 'Tips, tendencias y nuevos productos directo a tu inbox.' },
     ],
   },
   Rising: {
     color: '#F4A7C3',
-    gmvRange: '€300 – €999',
+    gmvRange: '$300 – $999',
     emoji: '🌸',
     rewards: [
-      { emoji: '🎁', title: 'Papaya Creator Kit', description: 'Exclusive brand kit: stickers, notebook, tote bag.' },
-      { emoji: '💰', title: 'Monthly €25 bonus', description: '€25 extra on your payouts every month.' },
-      { emoji: '📢', title: 'Brand deal first notification', description: 'Be the first to hear about new campaigns.' },
-      { emoji: '🏅', title: '€300 GMV badge', description: 'Official Rising badge for your profile.' },
+      { emoji: '🎁', title: 'Kit de creadora Papaya', description: 'Kit exclusivo: stickers, libreta, tote bag.' },
+      { emoji: '💰', title: 'Bono mensual de $25', description: '$25 extra en tus pagos cada mes.' },
+      { emoji: '📢', title: 'Primera notificación de deals', description: 'Sé la primera en enterarte de nuevas campañas.' },
+      { emoji: '🏅', title: 'Badge de $300 GMV', description: 'Badge oficial de Rising para tu perfil.' },
     ],
   },
   Pro: {
     color: '#1B5E3B',
-    gmvRange: '€1,000 – €4,999',
+    gmvRange: '$1,000 – $9,999',
     emoji: '💚',
     rewards: [
-      { emoji: '💸', title: 'Quarterly €100 bonus', description: '€100 bonus every three months on top.' },
-      { emoji: '📸', title: 'Photo & video shoot', description: 'Professional content shoot with the Papaya team.' },
-      { emoji: '🌐', title: 'Agency portfolio feature', description: 'You are featured on the Papaya website as a creator.' },
-      { emoji: '📞', title: '1:1 strategy calls', description: 'Monthly strategy session with your dedicated manager.' },
+      { emoji: '💸', title: 'Bono trimestral de $100', description: '$100 de bono cada tres meses.' },
+      { emoji: '📸', title: 'Sesión de fotos y video', description: 'Sesión profesional de contenido con el equipo Papaya.' },
+      { emoji: '🌐', title: 'Destacada en el portafolio de la agencia', description: 'Apareces en el sitio web de Papaya como creadora.' },
+      { emoji: '📞', title: 'Llamadas de estrategia 1:1', description: 'Sesión mensual de estrategia con tu manager dedicado.' },
     ],
   },
   Elite: {
     color: '#F59E0B',
-    gmvRange: '€5,000+',
+    gmvRange: '$10,000+',
     emoji: '👑',
     rewards: [
-      { emoji: '💎', title: 'Quarterly €500 bonus', description: '€500 extra every three months as a top creator.' },
-      { emoji: '🤝', title: 'Agency partnership', description: 'Official Papaya partner contract with exclusive terms.' },
-      { emoji: '✈️', title: 'Event invitations & travel', description: 'Invitations to brand events, trade shows and creator retreats.' },
-      { emoji: '🔧', title: 'Co-branded deals', description: 'Campaigns built specifically around you as a creator.' },
+      { emoji: '💎', title: 'Bono trimestral de $500', description: '$500 extra cada tres meses como top creadora.' },
+      { emoji: '🤝', title: 'Partnership con la agencia', description: 'Contrato oficial de partner Papaya con términos exclusivos.' },
+      { emoji: '✈️', title: 'Invitaciones a eventos y viajes', description: 'Invitaciones a eventos de marcas, ferias y retiros de creadoras.' },
+      { emoji: '🔧', title: 'Deals co-branded', description: 'Campañas construidas específicamente para ti como creadora.' },
     ],
   },
 }
@@ -87,9 +87,9 @@ export default async function RewardsPage() {
             height={48}
           />
           <div>
-            <h1 className="font-playfair text-4xl text-brand-black mb-1">Your Rewards.</h1>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Tus recompensas.</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              What you earn now — and what you can look forward to.
+              Lo que ganas ahora — y lo que te espera.
             </p>
           </div>
         </div>
@@ -125,17 +125,17 @@ export default async function RewardsPage() {
                   <div>
                     {isCurrent && (
                       <span className="font-dm-sans text-xs font-bold px-2.5 py-1 rounded-full text-white" style={{ backgroundColor: config.color }}>
-                        Current
+                        Actual
                       </span>
                     )}
                     {isPast && (
                       <span className="font-dm-sans text-xs font-medium text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full">
-                        ✓ Unlocked
+                        ✓ Desbloqueado
                       </span>
                     )}
                     {isFuture && (
                       <span className="font-dm-sans text-xs font-medium text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full">
-                        🔒 Locked
+                        🔒 Bloqueado
                       </span>
                     )}
                   </div>

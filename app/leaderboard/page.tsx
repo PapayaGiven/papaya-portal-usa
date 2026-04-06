@@ -63,9 +63,9 @@ export default async function LeaderboardPage() {
             height={48}
           />
           <div>
-            <h1 className="font-playfair text-4xl text-brand-black mb-1">Leaderboard</h1>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Ranking</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              {unlocked ? `Top ${leaderboard.length} creators by GMV` : 'Unlock at Rising level'}
+              {unlocked ? `Top ${leaderboard.length} creadoras por GMV` : 'Se desbloquea en el nivel Rising'}
             </p>
           </div>
         </div>
@@ -78,15 +78,15 @@ export default async function LeaderboardPage() {
                 {myRank}
               </div>
               <div>
-                <p className="font-dm-sans font-semibold text-sm text-brand-black">Your rank</p>
+                <p className="font-dm-sans font-semibold text-sm text-brand-black">Tu posición</p>
                 <p className="font-dm-sans text-xs text-gray-400">#{myRank} out of {leaderboard.length}</p>
               </div>
             </div>
             <div className="text-right">
               <p className="font-playfair text-2xl font-bold text-brand-green">
-                €{creator.gmv.toLocaleString('en-DE')}
+                ${creator.gmv.toLocaleString('en-US')}
               </p>
-              <p className="font-dm-sans text-xs text-gray-400">Your GMV</p>
+              <p className="font-dm-sans text-xs text-gray-400">Tu GMV</p>
             </div>
           </div>
         )}
@@ -115,7 +115,7 @@ export default async function LeaderboardPage() {
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className={`font-dm-sans font-semibold text-sm truncate ${isMe ? 'text-brand-green' : 'text-brand-black'}`}>
                         {displayName(c)}
-                        {isMe && <span className="ml-1 font-dm-sans text-xs font-normal text-brand-green">(you)</span>}
+                        {isMe && <span className="ml-1 font-dm-sans text-xs font-normal text-brand-green">(tú)</span>}
                       </p>
                       <span
                         className="font-dm-sans text-xs font-bold px-2 py-0.5 rounded-full text-white"
@@ -126,7 +126,7 @@ export default async function LeaderboardPage() {
                     </div>
                   </div>
                   <p className="font-playfair text-lg font-bold text-brand-green shrink-0">
-                    €{c.gmv.toLocaleString('en-DE')}
+                    ${c.gmv.toLocaleString('en-US')}
                   </p>
                 </div>
               )
@@ -144,7 +144,7 @@ export default async function LeaderboardPage() {
                     <p className="font-dm-sans font-semibold text-sm text-brand-black">{displayName(c)}</p>
                   </div>
                   <p className="font-playfair text-lg font-bold text-brand-green">
-                    €{c.gmv.toLocaleString('en-DE')}
+                    ${c.gmv.toLocaleString('en-US')}
                   </p>
                 </div>
               ))}

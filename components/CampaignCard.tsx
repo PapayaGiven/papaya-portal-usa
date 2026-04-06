@@ -14,7 +14,7 @@ function getTimeRemaining(deadline: string | null): string {
   const end = new Date(deadline).getTime()
   const diff = end - now
 
-  if (diff <= 0) return 'Expired'
+  if (diff <= 0) return 'Expirada'
 
   const hours = Math.floor(diff / (1000 * 60 * 60))
   const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
@@ -66,7 +66,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
           <span className="font-dm-sans font-bold text-2xl text-brand-pink">
             {campaign.commission_rate}%
           </span>
-          <p className="font-dm-sans text-xs text-gray-400">Commission</p>
+          <p className="font-dm-sans text-xs text-gray-400">Comisión</p>
         </div>
       </div>
 
@@ -77,7 +77,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
             LEVEL_COLORS[campaign.min_level] || 'bg-gray-100 text-gray-600'
           }`}
         >
-          from {campaign.min_level}
+          desde {campaign.min_level}
         </span>
 
         {campaign.spots_left !== null && (
@@ -89,8 +89,8 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
             }`}
           >
             {campaign.spots_left <= 3
-              ? `⚠️ Only ${campaign.spots_left} spots left!`
-              : `${campaign.spots_left} spots available`}
+              ? `⚠️ ¡Solo quedan ${campaign.spots_left} lugares!`
+              : `${campaign.spots_left} lugares disponibles`}
           </span>
         )}
 
@@ -113,7 +113,7 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
         className="mt-auto w-full py-2.5 rounded-xl font-dm-sans font-semibold text-sm text-white text-center transition-all hover:opacity-90 active:scale-[0.98] block"
         style={{ backgroundColor: '#1B5E3B' }}
       >
-        Apply →
+        Aplicar →
       </Link>
     </div>
   )

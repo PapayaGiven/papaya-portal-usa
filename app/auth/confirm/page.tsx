@@ -45,7 +45,7 @@ function ConfirmForm() {
         })
         if (error) {
           console.error('[auth/confirm] verifyOtp error:', error)
-          setError(`Einladungslink ungültig: ${error.message}`)
+          setError(`Enlace de invitación no válido: ${error.message}`)
         } else {
           console.log('[auth/confirm] verifyOtp success')
           setSessionReady(true)
@@ -63,7 +63,7 @@ function ConfirmForm() {
         })
         if (error) {
           console.error('[auth/confirm] verifyOtp (token) error:', error)
-          setError(`Einladungslink ungültig: ${error.message}`)
+          setError(`Enlace de invitación no válido: ${error.message}`)
         } else {
           console.log('[auth/confirm] verifyOtp (token) success')
           setSessionReady(true)
@@ -87,7 +87,7 @@ function ConfirmForm() {
           })
           if (error) {
             console.error('[auth/confirm] setSession error:', error)
-            setError(`Sitzung konnte nicht gesetzt werden: ${error.message}`)
+            setError(`No se pudo establecer la sesión: ${error.message}`)
           } else {
             console.log('[auth/confirm] setSession success')
             setSessionReady(true)
@@ -104,7 +104,7 @@ function ConfirmForm() {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
           console.error('[auth/confirm] exchangeCodeForSession error:', error)
-          setError(`Code-Austausch fehlgeschlagen: ${error.message}`)
+          setError(`Error en el intercambio de código: ${error.message}`)
         } else {
           console.log('[auth/confirm] exchangeCodeForSession success')
           setSessionReady(true)
@@ -121,7 +121,7 @@ function ConfirmForm() {
         setSessionReady(true)
       } else {
         console.warn('[auth/confirm] No token and no session — link may be invalid')
-        setError('Kein gültiger Einladungslink gefunden. Bitte fordere eine neue Einladung an.')
+        setError('No se encontró un enlace de invitación válido. Por favor solicita una nueva invitación.')
       }
       setExchanging(false)
     }
@@ -132,11 +132,11 @@ function ConfirmForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (password !== confirmPassword) {
-      setError('Die Passwörter stimmen nicht überein.')
+      setError('Las contraseñas no coinciden.')
       return
     }
     if (password.length < 8) {
-      setError('Das Passwort muss mindestens 8 Zeichen lang sein.')
+      setError('La contraseña debe tener al menos 8 caracteres.')
       return
     }
 
@@ -148,7 +148,7 @@ function ConfirmForm() {
 
     if (updateError) {
       console.error('[auth/confirm] updateUser error:', updateError)
-      setError(`Fehler: ${updateError.message}`)
+      setError(`Error: ${updateError.message}`)
       setLoading(false)
       return
     }
@@ -162,7 +162,7 @@ function ConfirmForm() {
     return (
       <div className="min-h-screen bg-brand-light-pink flex items-center justify-center px-4">
         <div className="text-center">
-          <p className="font-dm-sans text-sm text-gray-500">Einladung wird bestätigt…</p>
+          <p className="font-dm-sans text-sm text-gray-500">Confirmando invitación…</p>
         </div>
       </div>
     )
@@ -185,11 +185,11 @@ function ConfirmForm() {
               Papaya Social Club
             </p>
             <h1 className="font-playfair text-4xl text-brand-green leading-tight">
-              {sessionReady ? 'Willkommen!' : 'Fehler'}
+              {sessionReady ? '¡Bienvenida!' : 'Error'}
             </h1>
             {sessionReady && (
               <p className="font-dm-sans text-gray-500 mt-2 text-sm">
-                Erstelle dein Passwort, um loszulegen.
+                Crea tu contraseña para comenzar.
               </p>
             )}
           </div>
@@ -207,7 +207,7 @@ function ConfirmForm() {
                 </details>
               )}
               <p className="text-center font-dm-sans text-xs text-gray-400">
-                Bitte kontaktiere deine Agentur für eine neue Einladung.
+                Por favor contacta a tu agencia para una nueva invitación.
               </p>
             </div>
           )}
@@ -220,7 +220,7 @@ function ConfirmForm() {
                   htmlFor="password"
                   className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5"
                 >
-                  Neues Passwort
+                  Nueva contraseña
                 </label>
                 <input
                   id="password"
@@ -229,7 +229,7 @@ function ConfirmForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  placeholder="Mindestens 8 Zeichen"
+                  placeholder="Mínimo 8 caracteres"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
                 />
               </div>
@@ -239,7 +239,7 @@ function ConfirmForm() {
                   htmlFor="confirmPassword"
                   className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5"
                 >
-                  Passwort bestätigen
+                  Confirmar contraseña
                 </label>
                 <input
                   id="confirmPassword"
@@ -247,7 +247,7 @@ function ConfirmForm() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
-                  placeholder="Passwort wiederholen"
+                  placeholder="Repetir contraseña"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
                 />
               </div>
@@ -264,14 +264,14 @@ function ConfirmForm() {
                 className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] mt-2"
                 style={{ backgroundColor: '#1B5E3B' }}
               >
-                {loading ? 'Wird gespeichert...' : 'Passwort setzen →'}
+                {loading ? 'Guardando...' : 'Establecer contraseña →'}
               </button>
             </form>
           )}
         </div>
 
         <p className="text-center text-xs text-gray-400 font-dm-sans mt-6">
-          © 2024 Papaya Social Club · Alle Rechte vorbehalten
+          © 2024 Papaya Social Club · Todos los derechos reservados
         </p>
       </div>
     </div>

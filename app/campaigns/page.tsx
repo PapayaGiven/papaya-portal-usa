@@ -46,9 +46,9 @@ export default async function CampaignsPage() {
             height={48}
           />
           <div>
-            <h1 className="font-playfair text-4xl text-brand-black mb-1">Campaigns</h1>
+            <h1 className="font-playfair text-4xl text-brand-black mb-1">Campañas</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              {unlocked ? `${campaigns.length} active campaigns` : 'Unlock campaigns at Rising level'}
+              {unlocked ? `${campaigns.length} campañas activas` : 'Desbloquea campañas en el nivel Rising'}
             </p>
           </div>
         </div>
@@ -57,8 +57,8 @@ export default async function CampaignsPage() {
           campaigns.length === 0 ? (
             <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
               <p className="text-4xl mb-3">📢</p>
-              <h2 className="font-playfair text-2xl text-brand-black mb-2">No active campaigns right now.</h2>
-              <p className="font-dm-sans text-gray-500 text-sm">Check back soon — new campaigns are added regularly.</p>
+              <h2 className="font-playfair text-2xl text-brand-black mb-2">No hay campañas activas en este momento.</h2>
+              <p className="font-dm-sans text-gray-500 text-sm">Vuelve pronto — se agregan campañas nuevas regularmente.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -75,7 +75,7 @@ export default async function CampaignsPage() {
               ))}
               {previewCampaigns.length === 0 && (
                 <div className="col-span-3 bg-white rounded-2xl p-8 text-center">
-                  <p className="font-dm-sans text-gray-400">Campaigns will appear here once unlocked.</p>
+                  <p className="font-dm-sans text-gray-400">Las campañas aparecerán aquí cuando se desbloqueen.</p>
                 </div>
               )}
             </div>

@@ -24,10 +24,10 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
 
   const remaining = target - gmv
 
-  function formatEur(val: number) {
-    return new Intl.NumberFormat('en-DE', {
+  function formatUsd(val: number) {
+    return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'EUR',
+      currency: 'USD',
       maximumFractionDigits: 0,
     }).format(val)
   }
@@ -36,7 +36,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
     <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
       <div className="flex flex-col items-center gap-1">
         <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">
-          Your GMV
+          Tu GMV
         </h3>
         <span className="font-dm-sans text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
           {level}
@@ -63,10 +63,10 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
 
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className="font-dm-sans font-bold text-2xl text-brand-black leading-none">
-            {formatEur(gmv)}
+            {formatUsd(gmv)}
           </span>
           <span className="font-dm-sans text-xs text-gray-400 mt-1">
-            of {formatEur(target)}
+            de {formatUsd(target)}
           </span>
         </div>
       </div>
@@ -75,14 +75,14 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
         {nextLevel ? (
           <p className="font-dm-sans text-sm text-gray-600">
             <span className="font-semibold text-brand-green">
-              {formatEur(Math.max(remaining, 0))}
+              {formatUsd(Math.max(remaining, 0))}
             </span>{' '}
-            more to reach{' '}
+            más para llegar a{' '}
             <span className="font-semibold">{nextLevel}</span>
           </p>
         ) : (
           <p className="font-dm-sans text-sm text-amber-600 font-semibold">
-            🏆 Highest level reached!
+            🏆 ¡Nivel máximo alcanzado!
           </p>
         )}
 
@@ -93,7 +93,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
           />
         </div>
         <p className="text-xs text-gray-400 font-dm-sans mt-1">
-          {Math.round(progress * 100)}% to next level
+          {Math.round(progress * 100)}% al siguiente nivel
         </p>
       </div>
     </div>

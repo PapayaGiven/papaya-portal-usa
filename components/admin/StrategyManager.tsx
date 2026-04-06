@@ -57,11 +57,11 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
     startTransition(async () => {
       const result = await getStrategyForAdmin(creatorId, monthDate)
       setLoading(false)
-      if (result.error) { fb(`Fehler: ${result.error}`); return }
+      if (result.error) { fb(`Error: ${result.error}`); return }
       if (!result.data) {
         setStrategyProducts([emptyProduct()])
         setHashtagInputs([''])
-        fb('Keine Strategie für diesen Monat — Neue Strategie wird erstellt.')
+        fb('No hay estrategia para este mes — Se creará una nueva.')
         return
       }
       type RawProduct = Record<string, unknown> & { videos?: Record<string, unknown>[] }
@@ -82,7 +82,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
       }))
       setStrategyProducts(loaded.length > 0 ? loaded : [emptyProduct()])
       setHashtagInputs(loaded.map((p) => p.hashtags.join(', ')))
-      fb(`✓ Strategie geladen (${loaded.length} Produkte)`)
+      fb(`✓ Estrategia cargada (${loaded.length} productos)`)
     })
   }
 
@@ -126,8 +126,8 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
   }
 
   function handleSave() {
-    if (!creatorId) { fb('Fehler: Bitte Creator auswählen.'); return }
-    if (!month) { fb('Fehler: Bitte Monat auswählen.'); return }
+    if (!creatorId) { fb('Error: Selecciona una creadora.'); return }
+    if (!month) { fb('Error: Selecciona un mes.'); return }
     startTransition(async () => {
       const monthDate = `${month}-01`
       const result = await saveStrategy({
@@ -135,15 +135,15 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
         month: monthDate,
         products: strategyProducts,
       })
-      if (result.error) fb(`Fehler: ${result.error}`)
-      else fb('✓ Strategie gespeichert!')
+      if (result.error) fb(`Error: ${result.error}`)
+      else fb('¡Estrategia guardada!')
     })
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Strategie-Manager</h2>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Gestor de estrategias</h2>
       </div>
 
       {/* Creator + Month selector */}
@@ -156,14 +156,14 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
               onChange={(e) => setCreatorId(e.target.value)}
               className="input-field w-full"
             >
-              <option value="">Creator auswählen…</option>
+              <option value="">Seleccionar creadora…</option>
               {creators.filter((c) => c.is_active).map((c) => (
                 <option key={c.id} value={c.id}>{c.name || c.email}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Monat</label>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Mes</label>
             <input
               type="month"
               value={month}
@@ -176,13 +176,13 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
             onClick={loadStrategy}
             className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-4 py-2.5 rounded-xl hover:bg-brand-black/80 transition disabled:opacity-40"
           >
-            {loading ? 'Laden...' : 'Strategie laden / neu erstellen'}
+            {loading ? 'Cargando...' : 'Cargar / crear estrategia'}
           </button>
         </div>
       </div>
 
       {feedback && (
-        <p className={`text-sm font-dm-sans mb-4 px-3 py-2 rounded-lg ${feedback.startsWith('Fehler') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+        <p className={`text-sm font-dm-sans mb-4 px-3 py-2 rounded-lg ${feedback.startsWith('Error') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
           {feedback}
         </p>
       )}
@@ -193,7 +193,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
           <div key={pi} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
             {/* Product header */}
             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
-              <span className="font-dm-sans font-semibold text-sm text-brand-black">Produkt {pi + 1}</span>
+              <span className="font-dm-sans font-semibold text-sm text-brand-black">Producto {pi + 1}</span>
               <div className="flex items-center gap-2">
                 {PRIORITIES.map((prio) => (
                   <button
@@ -207,7 +207,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                 ))}
                 {strategyProducts.length > 1 && (
                   <button onClick={() => removeProduct(pi)} className="text-xs text-red-400 hover:text-red-600 ml-2">
-                    × Entfernen
+                    × Eliminar
                   </button>
                 )}
               </div>
@@ -217,26 +217,26 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
               {/* Product dropdown */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Produkt</label>
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Producto</label>
                   <select
                     value={sp.product_id}
                     onChange={(e) => updateProduct(pi, { product_id: e.target.value })}
                     className="input-field w-full"
                   >
-                    <option value="">Produkt wählen…</option>
+                    <option value="">Seleccionar producto…</option>
                     {products.map((p) => (
                       <option key={p.id} value={p.id}>{p.name} ({p.commission_rate}%)</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Verknüpfte Kampagne (optional)</label>
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Campaña vinculada (opcional)</label>
                   <select
                     value={sp.campaign_id ?? ''}
                     onChange={(e) => updateProduct(pi, { campaign_id: e.target.value || null })}
                     className="input-field w-full"
                   >
-                    <option value="">Keine Kampagne</option>
+                    <option value="">Sin campaña</option>
                     {campaigns.filter((c) => c.status === 'active').map((c) => (
                       <option key={c.id} value={c.id}>{c.brand_name}</option>
                     ))}
@@ -247,37 +247,37 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Videos / Tag</label>
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Videos / Día</label>
                   <input
                     type="number"
                     min="0"
                     step="0.5"
                     value={sp.videos_per_day ?? ''}
                     onChange={(e) => updateProduct(pi, { videos_per_day: e.target.value ? parseFloat(e.target.value) : null })}
-                    placeholder="z.B. 2"
+                    placeholder="ej. 2"
                     className="input-field w-full"
                   />
                 </div>
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Live-Std. / Woche</label>
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Horas live / Semana</label>
                   <input
                     type="number"
                     min="0"
                     step="0.5"
                     value={sp.live_hours_per_week ?? ''}
                     onChange={(e) => updateProduct(pi, { live_hours_per_week: e.target.value ? parseFloat(e.target.value) : null })}
-                    placeholder="z.B. 3"
+                    placeholder="ej. 3"
                     className="input-field w-full"
                   />
                 </div>
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">GMV-Ziel (€)</label>
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Meta GMV ($)</label>
                   <input
                     type="number"
                     min="0"
                     value={sp.gmv_target ?? ''}
                     onChange={(e) => updateProduct(pi, { gmv_target: e.target.value ? parseFloat(e.target.value) : null })}
-                    placeholder="z.B. 1500"
+                    placeholder="ej. 1500"
                     className="input-field w-full"
                   />
                 </div>
@@ -285,19 +285,19 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
 
               {/* Strategy note */}
               <div>
-                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Strategie-Notiz</label>
+                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Nota de estrategia</label>
                 <textarea
                   rows={3}
                   value={sp.strategy_note}
                   onChange={(e) => updateProduct(pi, { strategy_note: e.target.value })}
-                  placeholder="Tipps, Fokus-Themen, Dos & Don'ts für dieses Produkt…"
+                  placeholder="Tips, temas de enfoque, Dos & Don'ts para este producto…"
                   className="input-field w-full resize-none"
                 />
               </div>
 
               {/* Hashtags */}
               <div>
-                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Hashtags (kommagetrennt)</label>
+                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Hashtags (separados por coma)</label>
                 <input
                   type="text"
                   value={hashtagInputs[pi] ?? ''}
@@ -322,20 +322,20 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                 >
                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sp.is_retainer ? 'translate-x-5' : 'translate-x-1'}`} />
                 </div>
-                <span className="font-dm-sans text-sm text-gray-700">Teil einer Retainer-Kampagne</span>
+                <span className="font-dm-sans text-sm text-gray-700">Parte de una campaña Retainer</span>
               </label>
 
               {/* Example videos */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="font-dm-sans text-xs font-medium text-gray-500">Beispiel-Videos (max. 6)</label>
+                  <label className="font-dm-sans text-xs font-medium text-gray-500">Videos de ejemplo (máx. 6)</label>
                   {sp.videos.length < 6 && (
                     <button
                       type="button"
                       onClick={() => addVideo(pi)}
                       className="font-dm-sans text-xs font-semibold text-brand-green hover:underline"
                     >
-                      + Video hinzufügen
+                      + Agregar video
                     </button>
                   )}
                 </div>
@@ -346,14 +346,14 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                         type="url"
                         value={v.video_url}
                         onChange={(e) => updateVideo(pi, vi, 'video_url', e.target.value)}
-                        placeholder="TikTok-Video URL"
+                        placeholder="URL de video TikTok"
                         className="input-field flex-1"
                       />
                       <input
                         type="url"
                         value={v.thumbnail_url}
                         onChange={(e) => updateVideo(pi, vi, 'thumbnail_url', e.target.value)}
-                        placeholder="Thumbnail URL (optional)"
+                        placeholder="URL de thumbnail (opcional)"
                         className="input-field flex-1"
                       />
                       <button
@@ -376,14 +376,14 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
           onClick={addProduct}
           className="font-dm-sans text-sm font-semibold border-2 border-dashed border-gray-200 text-gray-400 hover:border-brand-green hover:text-brand-green px-5 py-2.5 rounded-xl transition"
         >
-          + Produkt hinzufügen
+          + Agregar producto
         </button>
         <button
           disabled={isPending || !creatorId}
           onClick={handleSave}
           className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-6 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
         >
-          {isPending ? 'Speichern...' : '✓ Strategie speichern'}
+          {isPending ? 'Guardando...' : '✓ Guardar estrategia'}
         </button>
       </div>
     </div>

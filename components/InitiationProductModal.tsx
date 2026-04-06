@@ -25,7 +25,7 @@ export default function InitiationProductModal({ products, creatorId }: Initiati
 
   function handleSave() {
     if (selected.length !== 3) {
-      setError('Please select exactly 3 products.')
+      setError('Por favor selecciona exactamente 3 productos.')
       return
     }
     setError(null)
@@ -46,10 +46,10 @@ export default function InitiationProductModal({ products, creatorId }: Initiati
         {/* Header */}
         <div className="px-8 pt-8 pb-5 text-center border-b border-gray-50">
           <div className="text-4xl mb-3">🌱</div>
-          <h2 className="font-playfair text-2xl text-brand-black mb-2">Choose Your 3 Products</h2>
+          <h2 className="font-playfair text-2xl text-brand-black mb-2">Elige tus 3 productos</h2>
           <p className="font-dm-sans text-sm text-gray-500">
-            As an Initiation creator, you start with 3 products. Your agency picked the best ones for you.
-            Choose the ones you&apos;re most excited to promote.
+            Como creadora en Initiation, comienzas con 3 productos. Tu agencia seleccionó los mejores para ti.
+            Elige los que más te emociona promover.
           </p>
         </div>
 
@@ -113,7 +113,7 @@ export default function InitiationProductModal({ products, creatorId }: Initiati
         <div className="px-8 pb-8 pt-4 border-t border-gray-50">
           <div className="flex items-center justify-between mb-4">
             <span className="font-dm-sans text-sm text-gray-500">
-              {selected.length} / 3 selected
+              {selected.length} / 3 seleccionados
             </span>
             {error && <p className="font-dm-sans text-xs text-rose-600">{error}</p>}
           </div>
@@ -123,7 +123,7 @@ export default function InitiationProductModal({ products, creatorId }: Initiati
             className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90"
             style={{ backgroundColor: '#1B5E3B' }}
           >
-            {isPending ? 'Saving...' : 'Start with these products →'}
+            {isPending ? 'Guardando...' : 'Comenzar con estos productos →'}
           </button>
         </div>
       </div>

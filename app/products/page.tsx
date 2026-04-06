@@ -85,11 +85,11 @@ export default async function ProductsPage() {
               height={48}
             />
             <div>
-              <h1 className="font-playfair text-4xl text-brand-black mb-1">Products</h1>
+              <h1 className="font-playfair text-4xl text-brand-black mb-1">Productos</h1>
               <p className="font-dm-sans text-gray-500 text-sm">
                 {isInitiation
-                  ? 'Your 3 starter products to promote.'
-                  : `${products.length} products available · sorted by commission`}
+                  ? 'Tus 3 productos iniciales para promover.'
+                  : `${products.length} productos disponibles · ordenados por comisión`}
               </p>
             </div>
           </div>
@@ -99,9 +99,9 @@ export default async function ProductsPage() {
         {isInitiation && products.length === 0 && !showInitiationModal && (
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
             <p className="text-4xl mb-3">📦</p>
-            <h2 className="font-playfair text-2xl text-brand-black mb-2">No products selected yet.</h2>
+            <h2 className="font-playfair text-2xl text-brand-black mb-2">Aún no has seleccionado productos.</h2>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Your selection couldn&apos;t be loaded. Please refresh the page.
+              No pudimos cargar tu selección. Por favor actualiza la página.
             </p>
           </div>
         )}

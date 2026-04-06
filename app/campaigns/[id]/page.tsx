@@ -32,7 +32,7 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
           href="/campaigns"
           className="inline-flex items-center gap-1.5 font-dm-sans text-sm text-gray-400 hover:text-brand-green transition mb-6"
         >
-          ← Back to campaigns
+          ← Volver a campañas
         </Link>
 
         {/* Campaign card */}
@@ -72,19 +72,19 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               <p className="font-playfair text-2xl font-bold text-brand-pink">
                 {campaign.commission_rate}%
               </p>
-              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Commission</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Comisión</p>
             </div>
             <div className="px-6 py-5 text-center">
               <p className="font-playfair text-2xl font-bold text-brand-black">
                 {campaign.spots_left ?? '∞'}
               </p>
-              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Spots left</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Lugares disponibles</p>
             </div>
             <div className="px-6 py-5 text-center">
               <p className="font-playfair text-2xl font-bold text-brand-green">
-                {campaign.budget ? `€${campaign.budget.toLocaleString('en-DE')}` : '–'}
+                {campaign.budget ? `$${campaign.budget.toLocaleString('en-US')}` : '–'}
               </p>
-              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Budget</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Presupuesto</p>
             </div>
             <div className="px-6 py-5 text-center">
               <span
@@ -93,7 +93,7 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               >
                 {campaign.min_level}+
               </span>
-              <p className="font-dm-sans text-xs text-gray-400 mt-1">Min. level</p>
+              <p className="font-dm-sans text-xs text-gray-400 mt-1">Nivel mín.</p>
             </div>
           </div>
 
@@ -123,24 +123,24 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition hover:opacity-90"
               style={{ backgroundColor: '#1B5E3B' }}
             >
-              Add to showcase →
+              Agregar al showcase →
             </a>
           )}
           {campaign.sample_available && (
             <a
-              href={`mailto:team@papayasocialclub.de?subject=Sample request: ${encodeURIComponent(campaign.brand_name)}`}
+              href={`mailto:team@papayasocialclub.com?subject=Sample request: ${encodeURIComponent(campaign.brand_name)}`}
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-brand-green border-2 border-brand-green hover:bg-brand-green/5 transition"
             >
-              Request sample
+              Solicitar muestra
             </a>
           )}
         </div>
 
         {/* Interest form */}
         <div className="bg-white rounded-3xl border border-brand-pink/20 shadow-sm p-8">
-          <h2 className="font-playfair text-2xl text-brand-black mb-1">I&apos;m in!</h2>
+          <h2 className="font-playfair text-2xl text-brand-black mb-1">¡Me interesa!</h2>
           <p className="font-dm-sans text-sm text-gray-500 mb-6">
-            Tell us your offer — we&apos;ll get back to you quickly.
+            Cuéntanos tu propuesta — te responderemos pronto.
           </p>
           <ApplicationForm campaignId={campaign.id} />
         </div>

@@ -46,9 +46,9 @@ export default function LevelUpCelebration({ creatorId, currentLevel }: LevelUpC
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
       <div className="bg-white rounded-3xl border border-brand-pink/20 shadow-2xl p-10 max-w-sm w-full text-center">
         <div className="text-6xl mb-4">{config.emoji}</div>
-        <h2 className="font-playfair text-3xl text-brand-black mb-2">Level Up!</h2>
+        <h2 className="font-playfair text-3xl text-brand-black mb-2">¡Subiste de nivel!</h2>
         <p className="font-dm-sans text-gray-500 text-sm mb-4">
-          You&apos;ve reached
+          Has alcanzado
         </p>
         <span
           className="inline-block font-dm-sans font-bold text-lg px-5 py-2 rounded-full text-white mb-6"
@@ -62,7 +62,7 @@ export default function LevelUpCelebration({ creatorId, currentLevel }: LevelUpC
           className="w-full py-3 rounded-xl font-dm-sans font-semibold text-sm text-white transition hover:opacity-90"
           style={{ backgroundColor: '#1B5E3B' }}
         >
-          Let&apos;s go! →
+          ¡Vamos! →
         </button>
       </div>
     </div>
@@ -70,8 +70,8 @@ export default function LevelUpCelebration({ creatorId, currentLevel }: LevelUpC
 }
 
 const LEVEL_CONFIG_DISPLAY: Record<CreatorLevel, { emoji: string; color: string; message: string }> = {
-  Initiation: { emoji: '🌱', color: '#9CA3AF', message: 'Welcome to Papaya Social Club! Your journey begins.' },
-  Rising: { emoji: '🌸', color: '#F4A7C3', message: 'You\'ve unlocked campaigns, the leaderboard, and exclusive perks!' },
-  Pro: { emoji: '💚', color: '#1B5E3B', message: 'You\'re a Pro now! Strategy calls, photo shoots, and more await.' },
-  Elite: { emoji: '👑', color: '#F59E0B', message: 'You\'ve reached the top tier. Agency partnership and €500 quarterly bonuses!' },
+  Initiation: { emoji: '��', color: '#9CA3AF', message: '¡Bienvenida a Papaya Social Club! Tu camino comienza aquí.' },
+  Rising: { emoji: '🌸', color: '#F4A7C3', message: '¡Desbloqueaste campañas, el ranking y beneficios exclusivos!' },
+  Pro: { emoji: '💚', color: '#1B5E3B', message: '¡Eres Pro! Llamadas de estrategia, sesiones de fotos y más te esperan.' },
+  Elite: { emoji: '👑', color: '#F59E0B', message: '¡Llegaste al nivel más alto! Partnership con la agencia y bonos trimestrales de $500.' },
 }

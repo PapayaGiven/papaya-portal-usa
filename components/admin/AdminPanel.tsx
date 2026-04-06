@@ -187,7 +187,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                 <td className="px-4 py-3">
                   {editingGMV?.id === c.id ? (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-400">€</span>
+                      <span className="text-gray-400">$</span>
                       <input
                         type="number"
                         value={editingGMV.value}
@@ -211,14 +211,14 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       onClick={() => setEditingGMV({ id: c.id, value: String(c.gmv) })}
                       className="font-semibold text-brand-green hover:underline"
                     >
-                      €{c.gmv.toLocaleString('en-DE')}
+                      ${c.gmv.toLocaleString('en-US')}
                     </button>
                   )}
                 </td>
                 <td className="px-4 py-3">
                   {editingGoal?.id === c.id ? (
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-400">€</span>
+                      <span className="text-gray-400">$</span>
                       <input
                         type="number"
                         value={editingGoal.value}
@@ -242,7 +242,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       onClick={() => setEditingGoal({ id: c.id, value: String(c.personal_gmv_goal ?? 0) })}
                       className="text-brand-black hover:underline hover:text-brand-green"
                     >
-                      {c.personal_gmv_goal > 0 ? `€${Number(c.personal_gmv_goal).toLocaleString('en-DE')}` : <span className="text-gray-400 text-xs">Set goal</span>}
+                      {c.personal_gmv_goal > 0 ? `$${Number(c.personal_gmv_goal).toLocaleString('en-US')}` : <span className="text-gray-400 text-xs">Set goal</span>}
                     </button>
                   )}
                 </td>
@@ -297,7 +297,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
                         <input
-                          placeholder="+49..."
+                          placeholder="+1..."
                           value={eliteForm.whatsapp_number}
                           onChange={(e) => setEliteForm((f) => ({ ...f, whatsapp_number: e.target.value }))}
                           className="input-field text-xs"
@@ -324,7 +324,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Manager WhatsApp</p>
                         <input
-                          placeholder="+49..."
+                          placeholder="+1..."
                           value={eliteForm.account_manager_whatsapp}
                           onChange={(e) => setEliteForm((f) => ({ ...f, account_manager_whatsapp: e.target.value }))}
                           className="input-field text-xs"
@@ -635,7 +635,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
               <option value="">Link product (optional)</option>
               {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
-            <input placeholder="Budget (€)" type="number" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} className="input-field" />
+            <input placeholder="Budget ($)" type="number" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} className="input-field" />
             <input placeholder="Product link (showcase)" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700 sm:col-span-2">
               <input type="checkbox" checked={form.sample_available} onChange={(e) => setForm((f) => ({ ...f, sample_available: e.target.checked }))} className="rounded" />
@@ -720,7 +720,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   )}
                 </td>
                 <td className="px-4 py-3 text-gray-600">
-                  {c.budget ? `€${c.budget.toLocaleString('en-DE')}` : '–'}
+                  {c.budget ? `$${c.budget.toLocaleString('en-US')}` : '–'}
                 </td>
                 <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                   {c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}
@@ -786,7 +786,7 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Creator', 'Campaign', 'Posts', 'Live hours', 'Offer (€)', 'Date'].map((h) => (
+              {['Creator', 'Campaign', 'Posts', 'Live hours', 'Offer ($)', 'Date'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -808,7 +808,7 @@ function ApplicationsTab({ applications }: { applications: ApplicationRow[] }) {
                 <td className="px-4 py-3 text-center"><span className="font-semibold text-brand-black">{a.live_hours_offered ?? '–'}h</span></td>
                 <td className="px-4 py-3">
                   <span className="font-bold text-brand-green">
-                    {a.price_offered != null ? `€${Number(a.price_offered).toLocaleString('en-DE')}` : '–'}
+                    {a.price_offered != null ? `$${Number(a.price_offered).toLocaleString('en-US')}` : '–'}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">

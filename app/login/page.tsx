@@ -21,7 +21,7 @@ export default function LoginPage() {
     const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
-      setError('Invalid email or password. Please try again.')
+      setError('Email o contraseña incorrectos. Inténtalo de nuevo.')
       setLoading(false)
       return
     }
@@ -43,8 +43,8 @@ export default function LoginPage() {
                 height={80}
               />
             </div>
-            <h1 className="font-playfair text-4xl text-brand-green leading-tight">Welcome back.</h1>
-            <p className="font-dm-sans text-gray-500 mt-2 text-sm">Your creator dashboard is waiting.</p>
+            <h1 className="font-playfair text-4xl text-brand-green leading-tight">Bienvenida de nuevo.</h1>
+            <p className="font-dm-sans text-gray-500 mt-2 text-sm">Tu dashboard te espera.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -56,20 +56,20 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                placeholder="you@example.com"
+                placeholder="tu@ejemplo.com"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Password</label>
+              <label htmlFor="password" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Contraseña</label>
               <input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                placeholder="••••••••"
+                placeholder="••••��•••"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
               />
             </div>
@@ -86,17 +86,17 @@ export default function LoginPage() {
               className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] mt-2"
               style={{ backgroundColor: '#1B5E3B' }}
             >
-              {loading ? 'Signing in...' : 'Sign in →'}
+              {loading ? 'Iniciando sesión...' : 'Iniciar sesión →'}
             </button>
           </form>
 
           <p className="text-center text-xs text-gray-400 font-dm-sans mt-6">
-            No account yet? You will be invited by your agency.
+            ¿No tienes cuenta? Tu agencia te enviará una invitación.
           </p>
         </div>
 
         <p className="text-center text-xs text-gray-400 font-dm-sans mt-6">
-          © 2024 Papaya Social Club · All rights reserved
+          © 2024 Papaya Social Club · Todos los derechos reservados
         </p>
       </div>
     </div>

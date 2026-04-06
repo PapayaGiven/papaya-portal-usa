@@ -16,7 +16,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         )}
         {product.is_exclusive && (
           <span className="font-dm-sans text-xs font-bold bg-brand-black text-white px-2.5 py-1 rounded-full tracking-wide">
-            EXCLUSIVE
+            EXCLUSIVO
           </span>
         )}
       </div>
@@ -41,7 +41,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         <p className="font-dm-sans font-bold text-2xl text-brand-pink leading-none">
           {product.commission_rate}%
         </p>
-        <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Commission</p>
+        <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Comisión</p>
       </div>
     </div>
   )

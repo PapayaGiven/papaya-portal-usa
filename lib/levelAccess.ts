@@ -27,22 +27,22 @@ export function hasEliteFeatures(level: CreatorLevel): boolean {
 export function getNavLinks(level: CreatorLevel | null): { href: string; label: string }[] {
   const base = [
     { href: '/dashboard', label: 'Dashboard' },
-    { href: '/strategy', label: 'My Strategy' },
-    { href: '/products', label: 'Products' },
-    { href: '/progress', label: 'Progress' },
-    { href: '/rewards', label: 'Rewards' },
+    { href: '/strategy', label: 'Mi Estrategia' },
+    { href: '/products', label: 'Productos' },
+    { href: '/progress', label: 'Mi Progreso' },
+    { href: '/rewards', label: 'Recompensas' },
   ]
 
   if (!level || level === 'Initiation') return base
 
   return [
     { href: '/dashboard', label: 'Dashboard' },
-    { href: '/strategy', label: 'My Strategy' },
-    { href: '/products', label: 'Products' },
-    { href: '/campaigns', label: 'Campaigns' },
-    { href: '/leaderboard', label: 'Leaderboard' },
-    { href: '/progress', label: 'Progress' },
-    { href: '/rewards', label: 'Rewards' },
+    { href: '/strategy', label: 'Mi Estrategia' },
+    { href: '/products', label: 'Productos' },
+    { href: '/campaigns', label: 'Campañas' },
+    { href: '/leaderboard', label: 'Ranking' },
+    { href: '/progress', label: 'Mi Progreso' },
+    { href: '/rewards', label: 'Recompensas' },
   ]
 }
 
