@@ -100,6 +100,15 @@ export async function addCreator(name: string, email: string): Promise<{ error?:
   return {}
 }
 
+export async function resendInvite(email: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
+    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
+  })
+  if (error) return { error: error.message }
+  return {}
+}
+
 export async function deleteCreator(id: string): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
