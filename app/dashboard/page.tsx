@@ -12,6 +12,7 @@ import ProductCard from '@/components/ProductCard'
 import ProductRequestButton from '@/components/ProductRequestButton'
 import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
+import PersonalGoalNotes from '@/components/PersonalGoalNotes'
 import { canSeeCampaigns, hasAccountManager, hasEliteFeatures } from '@/lib/levelAccess'
 
 function computeBanner(
@@ -74,7 +75,7 @@ export default async function DashboardPage() {
   const level = creator?.level ?? 'Initiation'
   const isInitiation = level === 'Initiation'
 
-  // Fetch active campaigns (only for Rising+)
+  // Fetch active campaigns (only for Foundation+)
   let campaigns: Campaign[] = []
   if (creator && canSeeCampaigns(level)) {
     const { data: campaignsData } = await supabase
@@ -338,11 +339,11 @@ export default async function DashboardPage() {
                     </div>
                   )}
 
-                  {creator.whatsapp_number && (
+                  {creator.account_manager_whatsapp && (
                     <div className="bg-amber-50 rounded-2xl border border-amber-200/60 p-5">
                       <p className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-amber-600 mb-2">Línea directa Elite</p>
                       <a
-                        href={`https://wa.me/${creator.whatsapp_number.replace(/\D/g, '')}`}
+                        href={`https://wa.me/${creator.account_manager_whatsapp.replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 font-dm-sans text-sm font-semibold text-brand-black hover:text-brand-green transition"
@@ -367,7 +368,7 @@ export default async function DashboardPage() {
                   )}
                 </div>
               ) : hasAccountManager(level) ? (
-                /* Pro: Account Manager card */
+                /* Growth+: Account Manager card */
                 <div className="bg-white rounded-2xl border border-brand-green/20 p-6 flex flex-col gap-4">
                   <div>
                     <p className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-brand-green mb-1">Tu Account Manager</p>
@@ -393,11 +394,11 @@ export default async function DashboardPage() {
                     )}
                   </div>
                   <div className="mt-auto pt-3 border-t border-gray-50">
-                    <p className="font-dm-sans text-xs text-gray-400">Beneficio Pro: llamadas de estrategia 1:1 mensuales incluidas.</p>
+                    <p className="font-dm-sans text-xs text-gray-400">Beneficio Growth: llamadas de estrategia 1:1 mensuales incluidas.</p>
                   </div>
                 </div>
               ) : (
-                /* Initiation / Rising: Personal Goal Card */
+                /* Initiation / Foundation: Personal Goal Card */
                 <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
                   <div className="flex flex-col items-center gap-1">
                     <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">Mi meta personal</h3>
@@ -462,11 +463,12 @@ export default async function DashboardPage() {
                       <p className="font-dm-sans text-xs text-gray-400">Pídele a tu agencia que establezca una meta de GMV para ti.</p>
                     </div>
                   )}
+                  <PersonalGoalNotes initialNotes={creator.personal_goal_notes} />
                 </div>
               )}
             </div>
 
-            {/* Campaigns (Rising+ only) */}
+            {/* Campaigns (Foundation+ only) */}
             {canSeeCampaigns(level) && campaigns.length > 0 && (
               <section className="mb-8">
                 <div className="flex items-center justify-between mb-4">

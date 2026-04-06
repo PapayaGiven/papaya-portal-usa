@@ -5,7 +5,7 @@ import Nav from '@/components/Nav'
 import CampaignCard from '@/components/CampaignCard'
 import LockedSection from '@/components/LockedSection'
 import { Creator, Campaign } from '@/lib/types'
-import { canSeeCampaigns } from '@/lib/levelAccess'
+import { canSeeCampaigns, getLevelIndex } from '@/lib/levelAccess'
 
 export default async function CampaignsPage() {
   const supabase = await createClient()
@@ -33,6 +33,14 @@ export default async function CampaignsPage() {
 
   const previewCampaigns = campaigns.slice(0, 3)
 
+  function creatorHasAccess(campaign: Campaign): boolean {
+    if (campaign.target_levels && campaign.target_levels.length > 0) {
+      return campaign.target_levels.includes(level)
+    }
+    // Fallback to min_level check
+    return getLevelIndex(level) >= getLevelIndex(campaign.min_level)
+  }
+
   return (
     <div className="min-h-screen bg-brand-light-pink">
       <Nav level={creator?.level ?? null} />
@@ -48,7 +56,7 @@ export default async function CampaignsPage() {
           <div>
             <h1 className="font-playfair text-4xl text-brand-black mb-1">Campañas</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              {unlocked ? `${campaigns.length} campañas activas` : 'Desbloquea campañas en el nivel Rising'}
+              {unlocked ? `${campaigns.length} campañas activas` : 'Desbloquea campañas en el nivel Foundation'}
             </p>
           </div>
         </div>
@@ -63,12 +71,25 @@ export default async function CampaignsPage() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {campaigns.map((campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
+                creatorHasAccess(campaign) ? (
+                  <CampaignCard key={campaign.id} campaign={campaign} />
+                ) : (
+                  <div key={campaign.id} className="relative rounded-2xl overflow-hidden">
+                    <div className="filter blur-[6px] pointer-events-none select-none">
+                      <CampaignCard campaign={campaign} />
+                    </div>
+                    <div className="absolute inset-0 bg-white/60 flex items-center justify-center rounded-2xl">
+                      <p className="font-dm-sans text-sm font-semibold text-gray-500 text-center px-4">
+                        Disponible en otro nivel — sigue creciendo
+                      </p>
+                    </div>
+                  </div>
+                )
               ))}
             </div>
           )
         ) : (
-          <LockedSection unlockAt="Rising">
+          <LockedSection unlockAt="Foundation">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {previewCampaigns.map((campaign) => (
                 <CampaignCard key={campaign.id} campaign={campaign} />

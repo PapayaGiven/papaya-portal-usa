@@ -25,7 +25,7 @@ export default function LockedSection({ unlockAt, children, className = '' }: Lo
             Sigue creciendo tu GMV para alcanzar este nivel.
           </p>
           <Link
-            href="/progress"
+            href="/mi-progreso"
             className="inline-block font-dm-sans text-xs font-semibold text-white px-4 py-2 rounded-xl transition hover:opacity-90"
             style={{ backgroundColor: '#1B5E3B' }}
           >

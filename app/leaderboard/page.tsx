@@ -65,7 +65,7 @@ export default async function LeaderboardPage() {
           <div>
             <h1 className="font-playfair text-4xl text-brand-black mb-1">Ranking</h1>
             <p className="font-dm-sans text-gray-500 text-sm">
-              {unlocked ? `Top ${leaderboard.length} creadoras por GMV` : 'Se desbloquea en el nivel Rising'}
+              {unlocked ? `Top ${leaderboard.length} creadoras por GMV` : 'Se desbloquea en el nivel Foundation'}
             </p>
           </div>
         </div>
@@ -133,7 +133,7 @@ export default async function LeaderboardPage() {
             })}
           </div>
         ) : (
-          <LockedSection unlockAt="Rising">
+          <LockedSection unlockAt="Foundation">
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               {previewLeaderboard.map((c, idx) => (
                 <div key={c.id} className="flex items-center gap-4 px-6 py-4 border-b border-gray-50 last:border-0">

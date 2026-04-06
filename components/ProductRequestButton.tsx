@@ -5,13 +5,13 @@ import { submitProductRequest } from '@/app/dashboard/actions'
 
 export default function ProductRequestButton() {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ product_name: '', brand_name: '', reason: '' })
+  const [form, setForm] = useState({ product_name: '', brand_name: '', reason: '', contact_info: '' })
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
   function handleClose() {
     setOpen(false)
-    setForm({ product_name: '', brand_name: '', reason: '' })
+    setForm({ product_name: '', brand_name: '', reason: '', contact_info: '' })
     setFeedback(null)
   }
 
@@ -23,7 +23,7 @@ export default function ProductRequestButton() {
         setFeedback({ type: 'error', msg: result.error })
       } else {
         setFeedback({ type: 'success', msg: '¡Solicitud enviada! La revisaremos pronto.' })
-        setForm({ product_name: '', brand_name: '', reason: '' })
+        setForm({ product_name: '', brand_name: '', reason: '', contact_info: '' })
         setTimeout(() => handleClose(), 2000)
       }
     })
@@ -80,6 +80,16 @@ export default function ProductRequestButton() {
                   value={form.reason}
                   onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
                   className="input-field w-full resize-none"
+                />
+              </div>
+              <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">¿Tienes un contacto en la marca? (opcional)</label>
+                <input
+                  type="text"
+                  placeholder="Email o teléfono del contacto"
+                  value={form.contact_info}
+                  onChange={(e) => setForm((f) => ({ ...f, contact_info: e.target.value }))}
+                  className="input-field w-full"
                 />
               </div>
             </div>

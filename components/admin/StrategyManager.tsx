@@ -29,6 +29,7 @@ function emptyProduct(): StrategyProductInput {
     hashtags: [],
     is_retainer: false,
     campaign_id: null,
+    brief_url: null,
     videos: [],
   }
 }
@@ -75,6 +76,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
         hashtags: (p.hashtags as string[]) ?? [],
         is_retainer: (p.is_retainer as boolean) ?? false,
         campaign_id: (p.campaign_id as string | null) ?? null,
+        brief_url: (p.brief_url as string | null) ?? null,
         videos: ((p.videos ?? []) as Record<string, unknown>[]).map((v) => ({
           video_url: (v.video_url as string) ?? '',
           thumbnail_url: (v.thumbnail_url as string) ?? '',
@@ -292,6 +294,18 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                   onChange={(e) => updateProduct(pi, { strategy_note: e.target.value })}
                   placeholder="Tips, temas de enfoque, Dos & Don'ts para este producto…"
                   className="input-field w-full resize-none"
+                />
+              </div>
+
+              {/* Brief URL */}
+              <div>
+                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Brief URL</label>
+                <input
+                  type="url"
+                  value={sp.brief_url ?? ''}
+                  onChange={(e) => updateProduct(pi, { brief_url: e.target.value || null })}
+                  placeholder="https://…"
+                  className="input-field w-full"
                 />
               </div>
 

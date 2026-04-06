@@ -217,6 +217,16 @@ export default async function StrategyPage() {
                       {campaign && (
                         <span className="font-dm-sans text-xs text-gray-400">{campaign.brand_name}</span>
                       )}
+                      {sp.brief_url && (
+                        <a
+                          href={sp.brief_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-dm-sans text-xs font-semibold text-brand-green hover:underline"
+                        >
+                          Ver brief →
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -246,7 +256,7 @@ export default async function StrategyPage() {
                     </div>
                   )}
 
-                  {/* Hashtags — Pro+ only */}
+                  {/* Hashtags — Growth+ only */}
                   {showHashtags && sp.hashtags && sp.hashtags.length > 0 && (
                     <div className="px-6 py-4 border-b border-gray-50">
                       <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Hashtags</h3>
@@ -260,7 +270,7 @@ export default async function StrategyPage() {
                     </div>
                   )}
 
-                  {/* Example videos — Pro+ only */}
+                  {/* Example videos — Growth+ only */}
                   {showVideos && sp.videos && sp.videos.length > 0 && (
                     <div className="px-6 py-4">
                       <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Videos de ejemplo</h3>
@@ -272,11 +282,11 @@ export default async function StrategyPage() {
                     </div>
                   )}
 
-                  {/* Rising hint: hashtags/videos locked */}
+                  {/* Locked hint: hashtags/videos locked */}
                   {!showHashtags && (sp.hashtags?.length ?? 0) > 0 && (
                     <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50">
                       <p className="font-dm-sans text-xs text-gray-400">
-                        🔒 Hashtags y videos de ejemplo se desbloquean en <strong>Pro</strong>.
+                        🔒 Hashtags y videos de ejemplo se desbloquean en <strong>Growth</strong>.
                       </p>
                     </div>
                   )}

@@ -11,6 +11,7 @@ import {
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
+  updateLevel, addReward, updateReward, deleteReward, confirmRewardReceived,
 } from '@/app/admin/actions'
 
 interface ApplicationRow {
@@ -28,6 +29,7 @@ interface ProductRequestRow {
   product_name: string
   brand_name: string
   reason: string | null
+  contact_info: string | null
   status: string
   created_at: string
   creator: { name: string | null; email: string } | null
@@ -40,6 +42,46 @@ interface InitiationSelectionRow {
   creator: { name: string | null; email: string } | null
 }
 
+interface LevelRow {
+  id: string
+  name: string
+  order_index: number
+  gmv_min: number
+  gmv_max: number | null
+  description: string | null
+  includes: string[]
+  excludes: string[]
+  updated_at: string
+}
+
+interface RewardRow {
+  id: string
+  level_name: string
+  title: string
+  description: string | null
+  emoji: string | null
+  cta_text: string | null
+  cta_type: string
+  cta_url: string | null
+  requires_address: boolean
+  order_index: number
+  is_active: boolean
+}
+
+interface CreatorRewardRow {
+  id: string
+  creator_id: string
+  reward_id: string
+  claimed_at: string
+  received_at: string | null
+  shipping_name: string | null
+  shipping_phone: string | null
+  shipping_address: string | null
+  admin_confirmed: boolean
+  creator: { name: string | null; email: string } | null
+  reward: { title: string; level_name: string } | null
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
@@ -47,13 +89,17 @@ interface AdminPanelProps {
   applications: ApplicationRow[]
   productRequests: ProductRequestRow[]
   initiationSelections: InitiationSelectionRow[]
+  levels: LevelRow[]
+  rewards: RewardRow[]
+  creatorRewards: CreatorRewardRow[]
 }
 
-const LEVELS: CreatorLevel[] = ['Initiation', 'Rising', 'Pro', 'Elite']
+const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
 const LEVEL_COLORS: Record<CreatorLevel, string> = {
   Initiation: 'bg-gray-100 text-gray-600',
-  Rising: 'bg-pink-100 text-pink-700',
-  Pro: 'bg-emerald-100 text-emerald-700',
+  Foundation: 'bg-pink-100 text-pink-700',
+  Growth: 'bg-emerald-100 text-emerald-700',
+  Scale: 'bg-purple-100 text-purple-700',
   Elite: 'bg-amber-100 text-amber-700',
 }
 
@@ -679,7 +725,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
   const [editingSpots, setEditingSpots] = useState<{ id: string; value: string } | null>(null)
   const emptyForm = {
     brand_name: '', description: '', commission_rate: '', spots_left: '',
-    deadline: '', min_level: 'Initiation' as CreatorLevel, status: 'active',
+    deadline: '', min_level: 'Initiation' as CreatorLevel, target_levels: [] as string[], status: 'active',
     brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false,
   }
   const [form, setForm] = useState(emptyForm)
@@ -707,9 +753,25 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
             <input placeholder="Commission %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
             <input placeholder="Spots available" type="number" value={form.spots_left} onChange={(e) => setForm((f) => ({ ...f, spots_left: e.target.value }))} className="input-field" />
             <input placeholder="Deadline" type="datetime-local" value={form.deadline} onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))} className="input-field" />
-            <select value={form.min_level} onChange={(e) => setForm((f) => ({ ...f, min_level: e.target.value as CreatorLevel }))} className="input-field">
-              {LEVELS.map((l) => <option key={l} value={l}>from {l}</option>)}
-            </select>
+            <div className="input-field flex flex-wrap items-center gap-2 !py-2">
+              <span className="text-xs text-gray-500 font-semibold mr-1">Levels:</span>
+              {LEVELS.map((l) => (
+                <label key={l} className="flex items-center gap-1 text-xs font-dm-sans text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.target_levels.includes(l)}
+                    onChange={(e) => setForm((f) => ({
+                      ...f,
+                      target_levels: e.target.checked
+                        ? [...f.target_levels, l]
+                        : f.target_levels.filter((v) => v !== l),
+                    }))}
+                    className="rounded"
+                  />
+                  {l}
+                </label>
+              ))}
+            </div>
             <input placeholder="Brand logo URL" value={form.brand_logo_url} onChange={(e) => setForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field" />
             <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
               <option value="">Link product (optional)</option>
@@ -737,7 +799,8 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                 commission_rate: parseFloat(form.commission_rate) || 0,
                 spots_left: parseInt(form.spots_left) || 0,
                 deadline: form.deadline,
-                min_level: form.min_level,
+                min_level: form.target_levels.length > 0 ? form.target_levels[0] as CreatorLevel : 'Initiation',
+                target_levels: form.target_levels,
                 status: 'active',
                 brand_logo_url: form.brand_logo_url || null,
                 product_id: form.product_id || null,
@@ -748,7 +811,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
               if (r.error) fb(`Error: ${r.error}`)
               else {
                 fb('✓ Campaign created')
-                setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', status: 'active', brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false })
+                setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', target_levels: [], status: 'active', brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false })
                 setShowAdd(false)
               }
             })}
@@ -765,7 +828,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Logo', 'Brand', 'Commission', 'Spots', 'Budget', 'Deadline', 'Min Level', 'Status', 'Actions'].map((h) => (
+              {['Logo', 'Brand', 'Commission', 'Spots', 'Budget', 'Deadline', 'Levels', 'Status', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
@@ -807,9 +870,19 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   {c.deadline ? new Date(c.deadline).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–'}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${LEVEL_COLORS[c.min_level] || 'bg-gray-100 text-gray-600'}`}>
-                    from {c.min_level}
-                  </span>
+                  {c.target_levels && c.target_levels.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {c.target_levels.map((lvl) => (
+                        <span key={lvl} className={`text-xs font-medium px-2 py-0.5 rounded-full ${LEVEL_COLORS[lvl as CreatorLevel] || 'bg-gray-100 text-gray-600'}`}>
+                          {lvl}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${LEVEL_COLORS[c.min_level] || 'bg-gray-100 text-gray-600'}`}>
+                      from {c.min_level}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
@@ -835,6 +908,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                             spots_left: String(c.spots_left ?? ''),
                             deadline: c.deadline ? c.deadline.slice(0, 16) : '',
                             min_level: c.min_level,
+                            target_levels: c.target_levels ?? [],
                             status: c.status,
                             brand_logo_url: c.brand_logo_url ?? '',
                             product_id: c.product_id ?? '',
@@ -895,10 +969,25 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                         <input type="datetime-local" value={editForm.deadline} onChange={(e) => setEditForm((f) => ({ ...f, deadline: e.target.value }))} className="input-field w-full" />
                       </div>
                       <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Min level</p>
-                        <select value={editForm.min_level} onChange={(e) => setEditForm((f) => ({ ...f, min_level: e.target.value as CreatorLevel }))} className="input-field w-full">
-                          {LEVELS.map((l) => <option key={l} value={l}>from {l}</option>)}
-                        </select>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Target levels</p>
+                        <div className="input-field w-full flex flex-wrap items-center gap-2 !py-2">
+                          {LEVELS.map((l) => (
+                            <label key={l} className="flex items-center gap-1 text-xs font-dm-sans text-gray-700 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={editForm.target_levels.includes(l)}
+                                onChange={(e) => setEditForm((f) => ({
+                                  ...f,
+                                  target_levels: e.target.checked
+                                    ? [...f.target_levels, l]
+                                    : f.target_levels.filter((v) => v !== l),
+                                }))}
+                                className="rounded"
+                              />
+                              {l}
+                            </label>
+                          ))}
+                        </div>
                       </div>
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Status</p>
@@ -950,7 +1039,8 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                           commission_rate: parseFloat(editForm.commission_rate) || 0,
                           spots_left: parseInt(editForm.spots_left) || 0,
                           deadline: editForm.deadline,
-                          min_level: editForm.min_level,
+                          min_level: editForm.target_levels.length > 0 ? editForm.target_levels[0] as CreatorLevel : editForm.min_level,
+                          target_levels: editForm.target_levels,
                           status: editForm.status,
                           brand_logo_url: editForm.brand_logo_url || null,
                           product_id: editForm.product_id || null,
@@ -1057,14 +1147,14 @@ function RequestsTab({ productRequests }: { productRequests: ProductRequestRow[]
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Creator', 'Product', 'Brand', 'Reason', 'Date', 'Status'].map((h) => (
+              {['Creator', 'Product', 'Brand', 'Reason', 'Contact', 'Date', 'Status'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {productRequests.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No product requests yet.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No product requests yet.</td></tr>
             )}
             {productRequests.map((r) => (
               <tr key={r.id} className="bg-white hover:bg-gray-50/50 transition-colors">
@@ -1078,6 +1168,9 @@ function RequestsTab({ productRequests }: { productRequests: ProductRequestRow[]
                 <td className="px-4 py-3 text-gray-600">{r.brand_name}</td>
                 <td className="px-4 py-3 text-gray-500 max-w-xs">
                   <p className="truncate">{r.reason || '–'}</p>
+                </td>
+                <td className="px-4 py-3 text-gray-500 text-xs">
+                  {r.contact_info || '–'}
                 </td>
                 <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
                   {new Date(r.created_at).toLocaleDateString('en-US', { day: '2-digit', month: '2-digit', year: '2-digit' })}
@@ -1197,10 +1290,441 @@ function InitiationTab({ selections }: { selections: InitiationSelectionRow[] })
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'settings'
+// ── Levels Tab ──────────────────────────────────────────────────────────────
+function LevelsTab({ levels }: { levels: LevelRow[] }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [form, setForm] = useState<{
+    name: string; gmv_min: string; gmv_max: string; description: string; includes: string; excludes: string
+  }>({ name: '', gmv_min: '0', gmv_max: '', description: '', includes: '', excludes: '' })
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections }: AdminPanelProps) {
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  function startEdit(level: LevelRow) {
+    setEditingId(level.id)
+    setForm({
+      name: level.name,
+      gmv_min: String(level.gmv_min),
+      gmv_max: level.gmv_max !== null ? String(level.gmv_max) : '',
+      description: level.description ?? '',
+      includes: (level.includes ?? []).join('\n'),
+      excludes: (level.excludes ?? []).join('\n'),
+    })
+  }
+
+  function handleSave(id: string) {
+    startTransition(async () => {
+      const res = await updateLevel(id, {
+        name: form.name,
+        gmv_min: Number(form.gmv_min),
+        gmv_max: form.gmv_max ? Number(form.gmv_max) : null,
+        description: form.description || undefined,
+        includes: form.includes.split('\n').map(s => s.trim()).filter(Boolean),
+        excludes: form.excludes.split('\n').map(s => s.trim()).filter(Boolean),
+      })
+      if (res.error) fb(`Error: ${res.error}`)
+      else { fb('Level updated'); setEditingId(null) }
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Niveles</h2>
+        <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
+          {levels.length} niveles
+        </span>
+      </div>
+
+      <Feedback msg={feedback} />
+
+      <div className="space-y-4 mt-4">
+        {levels.map((level) => (
+          <div key={level.id} className="border border-gray-100 rounded-2xl p-5">
+            {editingId === level.id ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Nombre</label>
+                    <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                  </div>
+                  <div>
+                    <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">GMV Min</label>
+                    <input type="number" value={form.gmv_min} onChange={e => setForm({ ...form, gmv_min: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                  </div>
+                  <div>
+                    <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">GMV Max</label>
+                    <input type="number" value={form.gmv_max} onChange={e => setForm({ ...form, gmv_max: e.target.value })} placeholder="Sin limite" className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Descripcion</label>
+                  <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Incluye (uno por linea)</label>
+                    <textarea value={form.includes} onChange={e => setForm({ ...form, includes: e.target.value })} rows={4} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                  </div>
+                  <div>
+                    <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">No incluye (uno por linea)</label>
+                    <textarea value={form.excludes} onChange={e => setForm({ ...form, excludes: e.target.value })} rows={4} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button disabled={isPending} onClick={() => handleSave(level.id)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50">
+                    {isPending ? 'Guardando...' : 'Guardar'}
+                  </button>
+                  <button onClick={() => setEditingId(null)} className="font-dm-sans text-sm text-gray-500 px-4 py-2 rounded-xl hover:bg-gray-100 transition">
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-dm-sans font-bold text-brand-black">{level.name}</h3>
+                  <p className="font-dm-sans text-sm text-gray-500 mt-0.5">
+                    GMV: ${level.gmv_min.toLocaleString()}{level.gmv_max !== null ? ` - $${level.gmv_max.toLocaleString()}` : '+'}
+                  </p>
+                  {level.description && <p className="font-dm-sans text-sm text-gray-400 mt-1">{level.description}</p>}
+                  {(level.includes?.length > 0 || level.excludes?.length > 0) && (
+                    <div className="flex gap-4 mt-2">
+                      {level.includes?.length > 0 && (
+                        <div>
+                          <span className="font-dm-sans text-xs text-gray-400 font-semibold">Incluye:</span>
+                          <ul className="mt-1 space-y-0.5">
+                            {level.includes.map((item, i) => (
+                              <li key={i} className="font-dm-sans text-xs text-emerald-600">+ {item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {level.excludes?.length > 0 && (
+                        <div>
+                          <span className="font-dm-sans text-xs text-gray-400 font-semibold">No incluye:</span>
+                          <ul className="mt-1 space-y-0.5">
+                            {level.excludes.map((item, i) => (
+                              <li key={i} className="font-dm-sans text-xs text-red-400">- {item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button onClick={() => startEdit(level)} className="font-dm-sans text-sm font-semibold text-brand-green hover:underline">
+                  Editar
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        {levels.length === 0 && (
+          <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No hay niveles configurados.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Rewards Tab ──────────────────────────────────────────────────────────────
+function RewardsTab({ rewards, creatorRewards, levels }: { rewards: RewardRow[]; creatorRewards: CreatorRewardRow[]; levels: LevelRow[] }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showAdd, setShowAdd] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  const emptyForm = { level_name: '', title: '', description: '', emoji: '', cta_text: '', cta_type: 'link', cta_url: '', requires_address: false, order_index: 0, is_active: true }
+  const [form, setForm] = useState(emptyForm)
+
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  // Group rewards by level_name
+  const grouped = rewards.reduce<Record<string, RewardRow[]>>((acc, r) => {
+    if (!acc[r.level_name]) acc[r.level_name] = []
+    acc[r.level_name].push(r)
+    return acc
+  }, {})
+
+  const levelNames = levels.length > 0 ? levels.map(l => l.name) : Object.keys(grouped)
+
+  function startEdit(r: RewardRow) {
+    setEditingId(r.id)
+    setForm({
+      level_name: r.level_name,
+      title: r.title,
+      description: r.description ?? '',
+      emoji: r.emoji ?? '',
+      cta_text: r.cta_text ?? '',
+      cta_type: r.cta_type,
+      cta_url: r.cta_url ?? '',
+      requires_address: r.requires_address,
+      order_index: r.order_index,
+      is_active: r.is_active,
+    })
+  }
+
+  function handleSave(id: string) {
+    startTransition(async () => {
+      const res = await updateReward(id, {
+        level_name: form.level_name,
+        title: form.title,
+        description: form.description || undefined,
+        emoji: form.emoji || undefined,
+        cta_text: form.cta_text || undefined,
+        cta_type: form.cta_type,
+        cta_url: form.cta_url || undefined,
+        requires_address: form.requires_address,
+        order_index: form.order_index,
+        is_active: form.is_active,
+      })
+      if (res.error) fb(`Error: ${res.error}`)
+      else { fb('Recompensa actualizada'); setEditingId(null) }
+    })
+  }
+
+  function handleAdd() {
+    if (!form.title || !form.level_name) { fb('Error: Titulo y nivel son requeridos'); return }
+    startTransition(async () => {
+      const res = await addReward({
+        level_name: form.level_name,
+        title: form.title,
+        description: form.description || undefined,
+        emoji: form.emoji || undefined,
+        cta_text: form.cta_text || undefined,
+        cta_type: form.cta_type || 'link',
+        cta_url: form.cta_url || undefined,
+        requires_address: form.requires_address,
+        order_index: form.order_index,
+        is_active: form.is_active,
+      })
+      if (res.error) fb(`Error: ${res.error}`)
+      else { fb('Recompensa creada'); setShowAdd(false); setForm(emptyForm) }
+    })
+  }
+
+  function handleDelete(id: string) {
+    if (!confirm('Eliminar esta recompensa?')) return
+    startTransition(async () => {
+      await deleteReward(id)
+      fb('Recompensa eliminada')
+    })
+  }
+
+  function handleConfirmReward(crId: string, confirmed: boolean) {
+    startTransition(async () => {
+      await confirmRewardReceived(crId, confirmed)
+      fb(confirmed ? 'Marcado como recibido' : 'Desmarcado')
+    })
+  }
+
+  function renderRewardForm(onSave: () => void, onCancel: () => void) {
+    return (
+      <div className="space-y-3 border border-gray-100 rounded-2xl p-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Nivel</label>
+            <select value={form.level_name} onChange={e => setForm({ ...form, level_name: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1">
+              <option value="">Seleccionar...</option>
+              {levelNames.map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Emoji</label>
+            <input value={form.emoji} onChange={e => setForm({ ...form, emoji: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+          </div>
+          <div className="col-span-2">
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Titulo</label>
+            <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+          </div>
+        </div>
+        <div>
+          <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Descripcion</label>
+          <textarea value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} rows={2} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">CTA Tipo</label>
+            <select value={form.cta_type} onChange={e => setForm({ ...form, cta_type: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1">
+              <option value="link">Link</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="form">Formulario</option>
+              <option value="none">Ninguno</option>
+            </select>
+          </div>
+          <div>
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">CTA Texto</label>
+            <input value={form.cta_text} onChange={e => setForm({ ...form, cta_text: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+          </div>
+          <div className="col-span-2">
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">CTA URL</label>
+            <input value={form.cta_url} onChange={e => setForm({ ...form, cta_url: e.target.value })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <label className="font-dm-sans text-xs text-gray-500 font-semibold uppercase">Orden</label>
+            <input type="number" value={form.order_index} onChange={e => setForm({ ...form, order_index: Number(e.target.value) })} className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm font-dm-sans mt-1" />
+          </div>
+          <label className="flex items-center gap-2 mt-5 font-dm-sans text-sm">
+            <input type="checkbox" checked={form.requires_address} onChange={e => setForm({ ...form, requires_address: e.target.checked })} className="rounded" />
+            Requiere direccion
+          </label>
+          <label className="flex items-center gap-2 mt-5 font-dm-sans text-sm">
+            <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} className="rounded" />
+            Activa
+          </label>
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button disabled={isPending} onClick={onSave} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50">
+            {isPending ? 'Guardando...' : 'Guardar'}
+          </button>
+          <button onClick={onCancel} className="font-dm-sans text-sm text-gray-500 px-4 py-2 rounded-xl hover:bg-gray-100 transition">
+            Cancelar
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Recompensas</h2>
+        <button onClick={() => { setShowAdd(!showAdd); setForm(emptyForm) }} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
+          {showAdd ? 'Cancelar' : '+ Nueva recompensa'}
+        </button>
+      </div>
+
+      <Feedback msg={feedback} />
+
+      {showAdd && (
+        <div className="mb-6">
+          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-2">Nueva recompensa</h3>
+          {renderRewardForm(handleAdd, () => { setShowAdd(false); setForm(emptyForm) })}
+        </div>
+      )}
+
+      {/* Rewards grouped by level */}
+      <div className="space-y-6">
+        {levelNames.map(levelName => {
+          const levelRewards = grouped[levelName]
+          if (!levelRewards || levelRewards.length === 0) return null
+          return (
+            <div key={levelName}>
+              <h3 className="font-dm-sans font-bold text-sm text-brand-black mb-3 uppercase tracking-wide">{levelName}</h3>
+              <div className="space-y-3">
+                {levelRewards.map(r => (
+                  <div key={r.id} className="border border-gray-100 rounded-2xl p-4">
+                    {editingId === r.id ? (
+                      renderRewardForm(() => handleSave(r.id), () => setEditingId(null))
+                    ) : (
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3">
+                          {r.emoji && <span className="text-2xl">{r.emoji}</span>}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-dm-sans font-semibold text-brand-black">{r.title}</h4>
+                              {!r.is_active && <span className="font-dm-sans text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Inactiva</span>}
+                            </div>
+                            {r.description && <p className="font-dm-sans text-sm text-gray-500 mt-0.5">{r.description}</p>}
+                            <div className="flex gap-3 mt-1 font-dm-sans text-xs text-gray-400">
+                              {r.cta_type !== 'none' && <span>CTA: {r.cta_text || r.cta_type}</span>}
+                              {r.requires_address && <span className="text-amber-500">Requiere direccion</span>}
+                              <span>Orden: {r.order_index}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => startEdit(r)} className="font-dm-sans text-sm font-semibold text-brand-green hover:underline">
+                            Editar
+                          </button>
+                          <button onClick={() => handleDelete(r.id)} className="font-dm-sans text-sm font-semibold text-red-500 hover:underline">
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+        {rewards.length === 0 && (
+          <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No hay recompensas configuradas.</p>
+        )}
+      </div>
+
+      {/* Reclamos section */}
+      <div className="mt-10">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Reclamos</h2>
+        {creatorRewards.length === 0 ? (
+          <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No hay reclamos todavia.</p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-gray-100">
+            <table className="w-full text-sm font-dm-sans">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  {['Creator', 'Recompensa', 'Nivel', 'Reclamado', 'Envio', 'Recibido'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {creatorRewards.map(cr => (
+                  <tr key={cr.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">
+                      {cr.creator?.name || cr.creator?.email || '-'}
+                      {cr.creator?.email && cr.creator?.name && (
+                        <p className="text-xs text-gray-400 font-normal">{cr.creator.email}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{cr.reward?.title || '-'}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{cr.reward?.level_name || '-'}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                      {new Date(cr.claimed_at).toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-gray-500">
+                      {cr.shipping_name || cr.shipping_address ? (
+                        <div>
+                          {cr.shipping_name && <p className="font-medium">{cr.shipping_name}</p>}
+                          {cr.shipping_phone && <p>{cr.shipping_phone}</p>}
+                          {cr.shipping_address && <p className="max-w-xs truncate">{cr.shipping_address}</p>}
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={cr.admin_confirmed}
+                          disabled={isPending}
+                          onChange={(e) => handleConfirmReward(cr.id, e.target.checked)}
+                          className="rounded"
+                        />
+                        <span className="font-dm-sans text-xs text-gray-500">
+                          {cr.admin_confirmed ? 'Recibido' : 'Marcar como recibido'}
+                        </span>
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -1212,6 +1736,8 @@ export default function AdminPanel({ creators, products, campaigns, applications
     { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
     { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
     { id: 'strategy', label: 'Strategy' },
+    { id: 'levels', label: 'Niveles', count: levels.length },
+    { id: 'rewards', label: 'Recompensas', count: rewards.length },
     { id: 'settings', label: 'Settings' },
   ]
 
@@ -1282,6 +1808,8 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'requests' && <RequestsTab productRequests={productRequests} />}
           {activeTab === 'initiation' && <InitiationTab selections={initiationSelections} />}
           {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
+          {activeTab === 'levels' && <LevelsTab levels={levels} />}
+          {activeTab === 'rewards' && <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />}
           {activeTab === 'settings' && <SettingsTab />}
         </div>
       </div>

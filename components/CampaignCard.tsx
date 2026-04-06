@@ -28,8 +28,9 @@ function getTimeRemaining(deadline: string | null): string {
 
 const LEVEL_COLORS: Record<string, string> = {
   Initiation: 'bg-gray-100 text-gray-600',
-  Rising: 'bg-pink-100 text-pink-700',
-  Pro: 'bg-emerald-100 text-emerald-700',
+  Foundation: 'bg-pink-100 text-pink-700',
+  Growth: 'bg-emerald-100 text-emerald-700',
+  Scale: 'bg-purple-100 text-purple-700',
   Elite: 'bg-amber-100 text-amber-700',
 }
 
@@ -72,13 +73,26 @@ export default function CampaignCard({ campaign }: CampaignCardProps) {
 
       {/* Badges row */}
       <div className="flex flex-wrap items-center gap-2">
-        <span
-          className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
-            LEVEL_COLORS[campaign.min_level] || 'bg-gray-100 text-gray-600'
-          }`}
-        >
-          desde {campaign.min_level}
-        </span>
+        {(campaign as Campaign & { target_levels?: string[] }).target_levels ? (
+          (campaign as Campaign & { target_levels?: string[] }).target_levels!.map((lvl) => (
+            <span
+              key={lvl}
+              className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
+                LEVEL_COLORS[lvl] || 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {lvl}
+            </span>
+          ))
+        ) : (
+          <span
+            className={`font-dm-sans text-xs font-medium px-2.5 py-1 rounded-full ${
+              LEVEL_COLORS[campaign.min_level] || 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            desde {campaign.min_level}
+          </span>
+        )}
 
         {campaign.spots_left !== null && (
           <span
