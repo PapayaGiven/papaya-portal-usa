@@ -336,6 +336,24 @@ export async function updateLevel(id: string, data: {
   return {}
 }
 
+export async function seedDefaultLevels(): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const defaults = [
+    { name: 'Initiation', order_index: 1, gmv_min: 0, gmv_max: 299, description: 'El punto de partida. Aquí demuestras tu disciplina.', includes: ['3 productos seleccionados', 'Checklist diario', 'Soporte grupal WhatsApp', 'Acceso a educación Kajabi'], excludes: ['Campañas de marcas', 'Leaderboard', 'Estrategia completa', 'Soporte 1:1'] },
+    { name: 'Foundation', order_index: 2, gmv_min: 300, gmv_max: 999, description: 'Ya sabes que funciona. Ahora construye consistencia.', includes: ['Catálogo completo de productos', 'Videos virales', 'Campañas disponibles', 'Leaderboard completo', 'Estrategia básica', 'Comunidad WhatsApp'], excludes: ['Estrategia con hashtags', 'Soporte 1:1', 'Pitch a marcas'] },
+    { name: 'Growth', order_index: 3, gmv_min: 1000, gmv_max: 4999, description: 'Aquí empieza el apalancamiento real.', includes: ['Todo de Foundation', 'Estrategia completa con hashtags y videos ejemplo', 'Aplicación a campañas de marcas', 'Productos exclusivos', 'Contacto con account manager'], excludes: ['Soporte 1:1 semanal', 'Retainers garantizados'] },
+    { name: 'Scale', order_index: 4, gmv_min: 5000, gmv_max: 9999, description: 'Estás escalando. Es momento de maximizar.', includes: ['Todo de Growth', 'Soporte 1:1 mensual', 'Acceso prioritario a campañas', 'Lista de productos curada'], excludes: ['Soporte 1:1 semanal', 'Mínimo 3 retainers activos'] },
+    { name: 'Elite', order_index: 5, gmv_min: 10000, gmv_max: null, description: 'El nivel más alto. Papaya trabaja para ti.', includes: ['Todo de Scale', 'Soporte 1:1 semanal', 'Account manager personal', 'Mínimo 3 retainers activos', 'Mastermind mensual', 'Evento físico trimestral', 'WhatsApp directo con tu manager'], excludes: [] },
+  ]
+
+  // Delete existing and re-insert
+  await supabase.from('levels').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+  const { error } = await supabase.from('levels').insert(defaults)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return {}
+}
+
 // ── Rewards ──────────────────────────────────────────────────────────────────
 
 export async function addReward(data: {

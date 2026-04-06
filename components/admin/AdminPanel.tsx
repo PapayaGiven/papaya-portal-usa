@@ -11,7 +11,7 @@ import {
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
-  updateLevel, addReward, updateReward, deleteReward, confirmRewardReceived,
+  updateLevel, seedDefaultLevels, addReward, updateReward, deleteReward, confirmRewardReceived,
 } from '@/app/admin/actions'
 
 interface ApplicationRow {
@@ -1331,7 +1331,20 @@ function LevelsTab({ levels }: { levels: LevelRow[] }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Niveles</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="font-dm-sans font-bold text-lg text-brand-black">Niveles</h2>
+          <button
+            disabled={isPending}
+            onClick={() => startTransition(async () => {
+              const r = await seedDefaultLevels()
+              if (r.error) fb(`Error: ${r.error}`)
+              else fb('✓ Niveles restaurados')
+            })}
+            className="font-dm-sans text-sm font-semibold bg-gray-100 text-gray-600 px-4 py-2 rounded-xl hover:bg-gray-200 transition disabled:opacity-50"
+          >
+            Restaurar niveles por defecto
+          </button>
+        </div>
         <span className="font-dm-sans text-xs text-gray-400 bg-gray-100 px-3 py-1 rounded-full">
           {levels.length} niveles
         </span>
@@ -1730,12 +1743,12 @@ export default function AdminPanel({ creators, products, campaigns, applications
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'creators', label: 'Creators', count: creators.length },
-    { id: 'products', label: 'Products', count: products.length },
-    { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
     { id: 'applications', label: 'Applications', count: applications.length },
     { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
-    { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
+    { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
+    { id: 'products', label: 'Products', count: products.length },
     { id: 'strategy', label: 'Strategy' },
+    { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
     { id: 'levels', label: 'Niveles', count: levels.length },
     { id: 'rewards', label: 'Recompensas', count: rewards.length },
     { id: 'settings', label: 'Settings' },

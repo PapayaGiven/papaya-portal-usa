@@ -3,8 +3,16 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
 import RewardCTA from '@/components/RewardCTA'
-import { Creator, LEVEL_CONFIG } from '@/lib/types'
+import { Creator } from '@/lib/types'
 import { LEVEL_ORDER, getLevelIndex } from '@/lib/levelAccess'
+
+const LEVEL_STYLE: Record<string, { emoji: string; color: string }> = {
+  Initiation: { emoji: '🌱', color: '#9CA3AF' },
+  Foundation: { emoji: '🌸', color: '#F4A7C3' },
+  Growth: { emoji: '💚', color: '#1B5E3B' },
+  Scale: { emoji: '🚀', color: '#8B5CF6' },
+  Elite: { emoji: '👑', color: '#F59E0B' },
+}
 
 interface Level {
   id: string
@@ -12,8 +20,8 @@ interface Level {
   order_index: number
   gmv_min: number
   gmv_max: number | null
-  emoji: string
-  color: string
+  emoji?: string | null
+  color?: string | null
   description: string | null
   includes: string[]
   excludes: string[]
@@ -112,12 +120,12 @@ export default async function MiProgresoPage() {
         {/* Current level badge */}
         <div className="mb-8 inline-flex items-center gap-3 bg-white border border-gray-100 rounded-full px-5 py-2.5 shadow-sm">
           <span className="text-xl">
-            {levels.find((l) => l.name === creator.level)?.emoji ?? '🌱'}
+            {levels.find((l) => l.name === creator.level)?.emoji ?? LEVEL_STYLE[creator.level]?.emoji ?? '🌱'}
           </span>
           <span className="font-dm-sans text-sm font-semibold text-brand-black">Estás en el nivel</span>
           <span
             className="font-dm-sans text-sm font-bold px-3 py-0.5 rounded-full text-white"
-            style={{ backgroundColor: levels.find((l) => l.name === creator.level)?.color ?? LEVEL_CONFIG[creator.level].color }}
+            style={{ backgroundColor: levels.find((l) => l.name === creator.level)?.color ?? LEVEL_STYLE[creator.level]?.color ?? '#9CA3AF' }}
           >
             {creator.level}
           </span>
@@ -145,7 +153,7 @@ export default async function MiProgresoPage() {
               >
                 {/* Left accent bar */}
                 {isCurrent && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" style={{ backgroundColor: lvl.color }} />
+                  <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl" style={{ backgroundColor: lvl.color ?? LEVEL_STYLE[lvl.name]?.color ?? '#9CA3AF' }} />
                 )}
                 {isPast && <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl bg-gray-200" />}
 
@@ -153,12 +161,12 @@ export default async function MiProgresoPage() {
                   {/* Level header */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <span className="text-2xl">{lvl.emoji}</span>
+                      <span className="text-2xl">{lvl.emoji ?? LEVEL_STYLE[lvl.name]?.emoji ?? '🌱'}</span>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <h2 className="font-playfair text-2xl text-brand-black leading-none">{lvl.name}</h2>
                           {isCurrent && (
-                            <span className="font-dm-sans text-xs font-bold px-2.5 py-0.5 rounded-full text-white" style={{ backgroundColor: lvl.color }}>
+                            <span className="font-dm-sans text-xs font-bold px-2.5 py-0.5 rounded-full text-white" style={{ backgroundColor: lvl.color ?? LEVEL_STYLE[lvl.name]?.color ?? '#9CA3AF' }}>
                               Actual
                             </span>
                           )}
@@ -273,7 +281,7 @@ export default async function MiProgresoPage() {
                           className="h-full rounded-full transition-all duration-700"
                           style={{
                             width: `${Math.min((creator.gmv / gmvMax) * 100, 100)}%`,
-                            backgroundColor: lvl.color,
+                            backgroundColor: lvl.color ?? LEVEL_STYLE[lvl.name]?.color ?? '#9CA3AF',
                           }}
                         />
                       </div>
