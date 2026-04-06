@@ -207,6 +207,30 @@ export async function addCampaign(data: {
   return {}
 }
 
+export async function updateCampaign(
+  id: string,
+  data: Partial<{
+    brand_name: string
+    description: string
+    commission_rate: number
+    spots_left: number
+    deadline: string
+    min_level: CreatorLevel
+    status: string
+    brand_logo_url: string | null
+    product_id: string | null
+    budget: number | null
+    product_link: string | null
+    sample_available: boolean
+  }>
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('campaigns').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return {}
+}
+
 export async function updateCampaignSpots(id: string, spots: number): Promise<void> {
   const supabase = createAdminClient()
   await supabase.from('campaigns').update({ spots_left: spots }).eq('id', id)

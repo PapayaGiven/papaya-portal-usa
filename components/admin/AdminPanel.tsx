@@ -9,7 +9,7 @@ import {
   adminLogout,
   addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, resendInvite,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
-  addCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
+  addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
 } from '@/app/admin/actions'
 
@@ -524,6 +524,7 @@ function ProductsTab({ products }: { products: Product[] }) {
               <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
             )}
             {products.map((p) => (
+              <>
               <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3">
                   {p.image_url
@@ -532,15 +533,12 @@ function ProductsTab({ products }: { products: Product[] }) {
                   }
                 </td>
                 <td className="px-4 py-3 font-medium text-brand-black">
-                  {editingId === p.id
-                    ? <input defaultValue={p.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="input-field w-36" />
-                    : <div>
-                        <p>{p.name}</p>
-                        {p.product_link && (
-                          <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline">Link →</a>
-                        )}
-                      </div>
-                  }
+                  <div>
+                    <p>{p.name}</p>
+                    {p.product_link && (
+                      <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline">Link →</a>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{p.commission_rate}%</td>
                 <td className="px-4 py-3">
@@ -573,31 +571,99 @@ function ProductsTab({ products }: { products: Product[] }) {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
-                    {editingId === p.id ? (
-                      <>
-                        <button
-                          disabled={isPending}
-                          onClick={() => startTransition(async () => {
-                            if (Object.keys(editForm).length > 0) await updateProduct(p.id, editForm)
-                            fb('✓ Updated'); setEditingId(null); setEditForm({})
-                          })}
-                          className="text-xs bg-brand-green text-white px-2.5 py-1 rounded-lg"
-                        >Save</button>
-                        <button onClick={() => { setEditingId(null); setEditForm({}) }} className="text-xs text-gray-400 hover:text-gray-600">Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => setEditingId(p.id)} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">Edit</button>
-                        <button
-                          disabled={isPending}
-                          onClick={() => { if (confirm(`Delete "${p.name}"?`)) startTransition(async () => { await deleteProduct(p.id); fb('✓ Deleted') }) }}
-                          className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
-                        >Delete</button>
-                      </>
-                    )}
+                    <button onClick={() => {
+                      if (editingId === p.id) { setEditingId(null); setEditForm({}) }
+                      else {
+                        setEditingId(p.id)
+                        setEditForm({
+                          name: p.name,
+                          commission_rate: p.commission_rate ?? 0,
+                          conversion_rate: p.conversion_rate ?? 0,
+                          niche: p.niche ?? '',
+                          is_exclusive: p.is_exclusive,
+                          image_url: p.image_url ?? '',
+                          product_link: p.product_link ?? '',
+                          tags: p.tags ?? [],
+                        })
+                      }
+                    }} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">
+                      {editingId === p.id ? 'Cancel' : 'Edit'}
+                    </button>
+                    <button
+                      disabled={isPending}
+                      onClick={() => { if (confirm(`Delete "${p.name}"?`)) startTransition(async () => { await deleteProduct(p.id); fb('✓ Deleted') }) }}
+                      className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
+                    >Delete</button>
                   </div>
                 </td>
               </tr>
+              {editingId === p.id && (
+                <tr key={`${p.id}-edit`} className="bg-brand-light-pink/50">
+                  <td colSpan={8} className="px-6 py-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Name</p>
+                        <input value={editForm.name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Commission %</p>
+                        <input type="number" value={editForm.commission_rate ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, commission_rate: parseFloat(e.target.value) || 0 }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Conversion %</p>
+                        <input type="number" value={editForm.conversion_rate ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, conversion_rate: parseFloat(e.target.value) || 0 }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Niche</p>
+                        <input value={editForm.niche ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, niche: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Image URL</p>
+                        <input value={editForm.image_url ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field w-full" />
+                        {editForm.image_url && (
+                          <img src={editForm.image_url as string} alt="Preview" className="w-12 h-12 object-cover rounded-lg border border-gray-200 mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Product Link</p>
+                        <div className="flex gap-1">
+                          <input value={editForm.product_link ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field w-full" />
+                          {editForm.product_link && (
+                            <a href={editForm.product_link as string} target="_blank" rel="noopener noreferrer" className="text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 px-2 py-1 rounded-lg whitespace-nowrap self-center transition">Test link</a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <p className="font-dm-sans text-xs font-medium text-gray-600 mb-2">Tags:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {availableTags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => toggleTag(tag, (editForm.tags as string[]) ?? [], (tags) => setEditForm((f) => ({ ...f, tags })))}
+                            className={`text-xs font-medium px-2.5 py-1 rounded-full border transition ${((editForm.tags as string[]) ?? []).includes(tag) ? `${tagColor(tag)} border-current` : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'}`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      disabled={isPending}
+                      onClick={() => startTransition(async () => {
+                        const payload = { ...editForm, image_url: (editForm.image_url as string) || null, product_link: (editForm.product_link as string) || null }
+                        await updateProduct(p.id, payload)
+                        fb('✓ Updated'); setEditingId(null); setEditForm({})
+                      })}
+                      className="mt-3 font-dm-sans text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+                    >
+                      {isPending ? 'Saving...' : 'Save changes'}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              </>
             ))}
           </tbody>
         </table>
@@ -609,12 +675,15 @@ function ProductsTab({ products }: { products: Product[] }) {
 // ── Campaigns Tab ─────────────────────────────────────────────────────────────
 function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products: Product[] }) {
   const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [editingSpots, setEditingSpots] = useState<{ id: string; value: string } | null>(null)
-  const [form, setForm] = useState({
+  const emptyForm = {
     brand_name: '', description: '', commission_rate: '', spots_left: '',
     deadline: '', min_level: 'Initiation' as CreatorLevel, status: 'active',
     brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false,
-  })
+  }
+  const [form, setForm] = useState(emptyForm)
+  const [editForm, setEditForm] = useState(emptyForm)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -706,6 +775,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
               <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No campaigns yet.</td></tr>
             )}
             {campaigns.map((c) => (
+              <>
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3">
                   {c.brand_logo_url
@@ -754,6 +824,31 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button
+                      onClick={() => {
+                        if (editingId === c.id) { setEditingId(null) }
+                        else {
+                          setEditingId(c.id)
+                          setEditForm({
+                            brand_name: c.brand_name,
+                            description: c.description ?? '',
+                            commission_rate: String(c.commission_rate ?? ''),
+                            spots_left: String(c.spots_left ?? ''),
+                            deadline: c.deadline ? c.deadline.slice(0, 16) : '',
+                            min_level: c.min_level,
+                            status: c.status,
+                            brand_logo_url: c.brand_logo_url ?? '',
+                            product_id: c.product_id ?? '',
+                            budget: c.budget ? String(c.budget) : '',
+                            product_link: c.product_link ?? '',
+                            sample_available: c.sample_available,
+                          })
+                        }
+                      }}
+                      className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition"
+                    >
+                      {editingId === c.id ? 'Cancel' : 'Edit'}
+                    </button>
+                    <button
                       disabled={isPending}
                       onClick={() => startTransition(async () => { await toggleCampaignStatus(c.id, c.status); fb(`✓ Campaign ${c.status === 'active' ? 'deactivated' : 'activated'}`) })}
                       className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition"
@@ -774,6 +869,106 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                   </div>
                 </td>
               </tr>
+              {editingId === c.id && (
+                <tr key={`${c.id}-edit`} className="bg-brand-light-pink/50">
+                  <td colSpan={9} className="px-6 py-4">
+                    <h4 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Edit campaign</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Brand name</p>
+                        <input value={editForm.brand_name} onChange={(e) => setEditForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Description</p>
+                        <input value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Commission %</p>
+                        <input type="number" value={editForm.commission_rate} onChange={(e) => setEditForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Spots left</p>
+                        <input type="number" value={editForm.spots_left} onChange={(e) => setEditForm((f) => ({ ...f, spots_left: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Deadline</p>
+                        <input type="datetime-local" value={editForm.deadline} onChange={(e) => setEditForm((f) => ({ ...f, deadline: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Min level</p>
+                        <select value={editForm.min_level} onChange={(e) => setEditForm((f) => ({ ...f, min_level: e.target.value as CreatorLevel }))} className="input-field w-full">
+                          {LEVELS.map((l) => <option key={l} value={l}>from {l}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Status</p>
+                        <select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))} className="input-field w-full">
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Brand Logo URL</p>
+                        <input value={editForm.brand_logo_url} onChange={(e) => setEditForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field w-full" />
+                        {editForm.brand_logo_url && (
+                          <img src={editForm.brand_logo_url} alt="Logo" className="h-8 object-contain rounded border border-gray-200 bg-white px-2 py-0.5 mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Linked product</p>
+                        <select value={editForm.product_id} onChange={(e) => setEditForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field w-full">
+                          <option value="">None</option>
+                          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Budget ($)</p>
+                        <input type="number" value={editForm.budget} onChange={(e) => setEditForm((f) => ({ ...f, budget: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Product link</p>
+                        <div className="flex gap-1">
+                          <input value={editForm.product_link} onChange={(e) => setEditForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field w-full" />
+                          {editForm.product_link && (
+                            <a href={editForm.product_link} target="_blank" rel="noopener noreferrer" className="text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 px-2 py-1 rounded-lg whitespace-nowrap self-center transition">Test</a>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-end pb-1">
+                        <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
+                          <input type="checkbox" checked={editForm.sample_available} onChange={(e) => setEditForm((f) => ({ ...f, sample_available: e.target.checked }))} className="rounded" />
+                          Sample available
+                        </label>
+                      </div>
+                    </div>
+                    <button
+                      disabled={isPending || !editForm.brand_name}
+                      onClick={() => startTransition(async () => {
+                        const r = await updateCampaign(c.id, {
+                          brand_name: editForm.brand_name,
+                          description: editForm.description,
+                          commission_rate: parseFloat(editForm.commission_rate) || 0,
+                          spots_left: parseInt(editForm.spots_left) || 0,
+                          deadline: editForm.deadline,
+                          min_level: editForm.min_level,
+                          status: editForm.status,
+                          brand_logo_url: editForm.brand_logo_url || null,
+                          product_id: editForm.product_id || null,
+                          budget: parseFloat(editForm.budget) || null,
+                          product_link: editForm.product_link || null,
+                          sample_available: editForm.sample_available,
+                        })
+                        if (r.error) fb(`Error: ${r.error}`)
+                        else { fb('✓ Campaign updated'); setEditingId(null) }
+                      })}
+                      className="mt-3 font-dm-sans text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+                    >
+                      {isPending ? 'Saving...' : 'Save changes'}
+                    </button>
+                  </td>
+                </tr>
+              )}
+              </>
             ))}
           </tbody>
         </table>
