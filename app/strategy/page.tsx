@@ -122,7 +122,7 @@ export default async function StrategyPage() {
         {/* Header */}
         <div className="mb-8 flex items-center gap-4">
           <Image
-            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
+            src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
             alt="Papaya Social Club"
             width={48}
             height={48}

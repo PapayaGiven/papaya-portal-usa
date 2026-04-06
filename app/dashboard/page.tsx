@@ -181,7 +181,7 @@ export default async function DashboardPage() {
         {/* Greeting row */}
         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <Image
-            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
+            src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
             alt=""
             width={180}
             height={180}

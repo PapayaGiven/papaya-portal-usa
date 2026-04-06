@@ -35,7 +35,7 @@ export default function Nav({ level }: NavProps) {
           {/* Logo */}
           <Link href="/dashboard" className="flex items-center gap-2 shrink-0">
             <Image
-              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
+              src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
               alt="Papaya Social Club"
               width={28}
               height={28}
@@ -103,7 +103,7 @@ export default function Nav({ level }: NavProps) {
         <div className="md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1">
           <div className="flex items-center gap-2 px-4 py-2 mb-1">
             <Image
-              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
+              src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
               alt="Papaya Social Club"
               width={20}
               height={20}

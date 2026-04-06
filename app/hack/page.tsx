@@ -46,7 +46,7 @@ export default async function HackPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Image
-              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
+              src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_green.png"
               alt="Papaya Social Club"
               width={28}
               height={28}
@@ -70,7 +70,7 @@ export default async function HackPage() {
         <div className="text-center mb-12">
           <div className="flex justify-center mb-4">
             <Image
-              src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
+              src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
               alt="Papaya Social Club"
               width={80}
               height={80}

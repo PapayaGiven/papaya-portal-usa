@@ -1017,7 +1017,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <Image
-                src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/Long_green.png"
+                src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Long_green.png"
                 alt="Papaya Social Club"
                 width={120}
                 height={32}

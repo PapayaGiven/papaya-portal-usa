@@ -57,7 +57,7 @@ export default async function LeaderboardPage() {
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="mb-8 flex items-center gap-4">
           <Image
-            src="https://cgimvsmnfmpzpkakiguo.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
+            src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
             alt="Papaya Social Club"
             width={48}
             height={48}
