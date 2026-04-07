@@ -248,6 +248,33 @@ export default async function StrategyPage() {
                     </div>
                   </div>
 
+                  {/* Video Focus */}
+                  {sp.video_focus && (
+                    <div className="px-6 py-4 border-b border-gray-50">
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                        <span className="text-xl shrink-0 mt-0.5">🎯</span>
+                        <div>
+                          <h3 className="font-dm-sans text-xs font-semibold text-amber-700 uppercase tracking-widest mb-1">Enfoque del video</h3>
+                          <p className="font-dm-sans text-sm text-amber-900 leading-relaxed">{sp.video_focus}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Quick Checklist */}
+                  {sp.quick_checklist && sp.quick_checklist.length > 0 && (
+                    <div className="px-6 py-4 border-b border-gray-50">
+                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Checklist rápido</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {sp.quick_checklist.map((item, i) => (
+                          <span key={i} className="inline-flex items-center gap-1.5 font-dm-sans text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+                            <span className="text-emerald-500">✓</span> {item}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Strategy note */}
                   {sp.strategy_note && (
                     <div className="px-6 py-4 border-b border-gray-50">

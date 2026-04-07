@@ -404,6 +404,7 @@ export async function updateCreatorEliteSettings(
     mastermind_date?: string | null
     account_manager_name?: string | null
     account_manager_whatsapp?: string | null
+    booking_link?: string | null
   }
 ): Promise<{ error?: string }> {
   const supabase = createAdminClient()
@@ -432,6 +433,8 @@ export interface StrategyProductInput {
   is_retainer: boolean
   campaign_id: string | null
   brief_url: string | null
+  video_focus: string
+  quick_checklist: string[]
   videos: VideoInput[]
 }
 
@@ -467,6 +470,8 @@ export async function saveStrategy(data: {
         is_retainer: p.is_retainer,
         campaign_id: p.campaign_id || null,
         brief_url: p.brief_url || null,
+        video_focus: p.video_focus || null,
+        quick_checklist: p.quick_checklist ?? [],
       })
       .select('id')
       .single()
@@ -518,4 +523,39 @@ export async function getStrategyForAdmin(
   if (pError) return { error: pError.message }
 
   return { data: { id: strategy.id, products: products ?? [] } }
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+export async function getSettings(): Promise<Record<string, unknown> | null> {
+  const supabase = createAdminClient()
+  const { data } = await supabase.from('settings').select('*').limit(1).maybeSingle()
+  return data
+}
+
+export async function updateSettings(data: {
+  calls_per_month_initiation?: number
+  calls_per_month_foundation?: number
+  calls_per_month_growth?: number
+  calls_per_month_scale?: number
+  calls_per_month_elite?: number
+  booking_link_growth?: string | null
+  booking_link_scale?: string | null
+  booking_link_elite?: string | null
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+
+  const { data: existing } = await supabase.from('settings').select('id').limit(1).maybeSingle()
+
+  if (existing) {
+    const { error } = await supabase.from('settings').update(data).eq('id', existing.id)
+    if (error) return { error: error.message }
+  } else {
+    const { error } = await supabase.from('settings').insert(data)
+    if (error) return { error: error.message }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
 }

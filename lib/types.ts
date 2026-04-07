@@ -19,6 +19,7 @@ export interface Creator {
   account_manager_name: string | null
   account_manager_whatsapp: string | null
   personal_goal_notes: string | null
+  booking_link: string | null
 }
 
 export interface Product {
@@ -96,6 +97,8 @@ export interface StrategyProduct {
   is_retainer: boolean
   campaign_id: string | null
   brief_url: string | null
+  video_focus: string | null
+  quick_checklist: string[]
   created_at: string
   product?: Product | null
   campaign?: Campaign | null
@@ -129,6 +132,18 @@ export interface ProductRequest {
   contact_info: string | null
   status: string
   created_at: string
+}
+
+export interface SiteSettings {
+  id: string
+  calls_per_month_initiation: number
+  calls_per_month_foundation: number
+  calls_per_month_growth: number
+  calls_per_month_scale: number
+  calls_per_month_elite: number
+  booking_link_growth: string | null
+  booking_link_scale: string | null
+  booking_link_elite: string | null
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {

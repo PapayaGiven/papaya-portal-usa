@@ -12,7 +12,9 @@ import {
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
   updateLevel, seedDefaultLevels, addReward, updateReward, deleteReward, confirmRewardReceived,
+  updateSettings,
 } from '@/app/admin/actions'
+import { SiteSettings } from '@/lib/types'
 
 interface ApplicationRow {
   id: string
@@ -92,6 +94,7 @@ interface AdminPanelProps {
   levels: LevelRow[]
   rewards: RewardRow[]
   creatorRewards: CreatorRewardRow[]
+  settings: SiteSettings | null
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
@@ -131,7 +134,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
   const [editingGMV, setEditingGMV] = useState<{ id: string; value: string } | null>(null)
   const [editingGoal, setEditingGoal] = useState<{ id: string; value: string } | null>(null)
   const [expandedElite, setExpandedElite] = useState<string | null>(null)
-  const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '' })
+  const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string; booking_link: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '', booking_link: '' })
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -144,6 +147,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
       mastermind_date: c.mastermind_date ? c.mastermind_date.slice(0, 16) : '',
       account_manager_name: c.account_manager_name ?? '',
       account_manager_whatsapp: c.account_manager_whatsapp ?? '',
+      booking_link: c.booking_link ?? '',
     })
   }
 
@@ -388,6 +392,15 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                         />
                       </div>
                     </div>
+                    <div className="mb-3">
+                      <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Booking link (calendario personal)</p>
+                      <input
+                        placeholder="https://calendar.app.google/..."
+                        value={eliteForm.booking_link}
+                        onChange={(e) => setEliteForm((f) => ({ ...f, booking_link: e.target.value }))}
+                        className="input-field text-xs w-full sm:w-1/2"
+                      />
+                    </div>
                     <button
                       disabled={isPending}
                       onClick={() => startTransition(async () => {
@@ -396,6 +409,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                           mastermind_date: eliteForm.mastermind_date || null,
                           account_manager_name: eliteForm.account_manager_name || null,
                           account_manager_whatsapp: eliteForm.account_manager_whatsapp || null,
+                          booking_link: eliteForm.booking_link || null,
                         })
                         if (r.error) fb(`Error: ${r.error}`)
                         else { fb('✓ Settings saved'); setExpandedElite(null) }
@@ -1200,11 +1214,25 @@ function RequestsTab({ productRequests }: { productRequests: ProductRequestRow[]
 }
 
 // ── Settings Tab ──────────────────────────────────────────────────────────────
-function SettingsTab() {
+function SettingsTab({ settings }: { settings: SiteSettings | null }) {
   const [copied, setCopied] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const [bookingForm, setBookingForm] = useState({
+    calls_per_month_initiation: settings?.calls_per_month_initiation ?? 0,
+    calls_per_month_foundation: settings?.calls_per_month_foundation ?? 0,
+    calls_per_month_growth: settings?.calls_per_month_growth ?? 1,
+    calls_per_month_scale: settings?.calls_per_month_scale ?? 2,
+    calls_per_month_elite: settings?.calls_per_month_elite ?? 4,
+    booking_link_growth: settings?.booking_link_growth ?? '',
+    booking_link_scale: settings?.booking_link_scale ?? '',
+    booking_link_elite: settings?.booking_link_elite ?? 'https://calendar.app.google/bW5ZsKF9wbDrLVF6A',
+  })
   const hackUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/hack`
     : '/hack'
+
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
 
   function copyHackUrl() {
     navigator.clipboard.writeText(hackUrl).then(() => {
@@ -1242,6 +1270,92 @@ function SettingsTab() {
           >
             Open Hack Portal →
           </a>
+        </div>
+      </div>
+
+      {/* 1:1 Booking Settings */}
+      <div>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Llamadas 1:1 — Booking</h2>
+        <Feedback msg={feedback} />
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-5">
+          <div>
+            <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Llamadas por mes por nivel</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {(['initiation', 'foundation', 'growth', 'scale', 'elite'] as const).map((lvl) => {
+                const key = `calls_per_month_${lvl}` as keyof typeof bookingForm
+                return (
+                  <div key={lvl}>
+                    <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{lvl}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={bookingForm[key]}
+                      onChange={(e) => setBookingForm((f) => ({ ...f, [key]: parseInt(e.target.value) || 0 }))}
+                      className="input-field w-full"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Booking link por defecto por nivel</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Growth</label>
+                <input
+                  type="url"
+                  value={bookingForm.booking_link_growth}
+                  onChange={(e) => setBookingForm((f) => ({ ...f, booking_link_growth: e.target.value }))}
+                  placeholder="https://calendar.app.google/..."
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Scale</label>
+                <input
+                  type="url"
+                  value={bookingForm.booking_link_scale}
+                  onChange={(e) => setBookingForm((f) => ({ ...f, booking_link_scale: e.target.value }))}
+                  placeholder="https://calendar.app.google/..."
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Elite</label>
+                <input
+                  type="url"
+                  value={bookingForm.booking_link_elite}
+                  onChange={(e) => setBookingForm((f) => ({ ...f, booking_link_elite: e.target.value }))}
+                  placeholder="https://calendar.app.google/..."
+                  className="input-field w-full"
+                />
+              </div>
+            </div>
+          </div>
+
+          <button
+            disabled={isPending}
+            onClick={() => startTransition(async () => {
+              const r = await updateSettings({
+                calls_per_month_initiation: bookingForm.calls_per_month_initiation,
+                calls_per_month_foundation: bookingForm.calls_per_month_foundation,
+                calls_per_month_growth: bookingForm.calls_per_month_growth,
+                calls_per_month_scale: bookingForm.calls_per_month_scale,
+                calls_per_month_elite: bookingForm.calls_per_month_elite,
+                booking_link_growth: bookingForm.booking_link_growth || null,
+                booking_link_scale: bookingForm.booking_link_scale || null,
+                booking_link_elite: bookingForm.booking_link_elite || null,
+              })
+              if (r.error) fb(`Error: ${r.error}`)
+              else fb('✓ Booking settings saved!')
+            })}
+            className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-6 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+          >
+            {isPending ? 'Saving...' : 'Save booking settings'}
+          </button>
         </div>
       </div>
     </div>
@@ -1737,7 +1851,7 @@ function RewardsTab({ rewards, creatorRewards, levels }: { rewards: RewardRow[];
 // ── Main Admin Panel ──────────────────────────────────────────────────────────
 type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings'
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards }: AdminPanelProps) {
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -1823,7 +1937,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
           {activeTab === 'levels' && <LevelsTab levels={levels} />}
           {activeTab === 'rewards' && <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />}
-          {activeTab === 'settings' && <SettingsTab />}
+          {activeTab === 'settings' && <SettingsTab settings={settings} />}
         </div>
       </div>
     </div>

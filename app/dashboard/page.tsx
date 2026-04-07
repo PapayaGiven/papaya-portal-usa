@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Campaign, Product, LEVEL_CONFIG, StrategyProduct } from '@/lib/types'
+import { Creator, Campaign, Product, LEVEL_CONFIG, StrategyProduct, SiteSettings } from '@/lib/types'
 import Nav from '@/components/Nav'
 import SmartBanner from '@/components/SmartBanner'
 import GMVRing from '@/components/GMVRing'
@@ -146,6 +146,10 @@ export default async function DashboardPage() {
       strategyProducts = (spData ?? []) as StrategyProduct[]
     }
   }
+
+  // Fetch settings for booking
+  const { data: settingsData } = await admin.from('settings').select('*').limit(1).maybeSingle()
+  const siteSettings = settingsData as SiteSettings | null
 
   const totalVideosPerDay = strategyProducts.reduce((sum, p) => sum + (p.videos_per_day ?? 0), 0)
   const topStratProducts = strategyProducts
@@ -453,6 +457,61 @@ export default async function DashboardPage() {
                 </div>
               )}
             </div>
+
+            {/* 1:1 Booking Card */}
+            {(() => {
+              const callsKey = `calls_per_month_${level.toLowerCase()}` as keyof SiteSettings
+              const callsPerMonth = (siteSettings?.[callsKey] as number) ?? 0
+              const bookingLinkKey = `booking_link_${level.toLowerCase()}` as keyof SiteSettings
+              const defaultBookingLink = (siteSettings?.[bookingLinkKey] as string) ?? null
+              const personalLink = creator.booking_link
+              const bookingLink = personalLink || defaultBookingLink
+              const isLocked = level === 'Initiation' || level === 'Foundation'
+
+              return (
+                <div className="mb-8">
+                  <div className="bg-white rounded-2xl border border-brand-pink/20 p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-xl">📞</div>
+                      <div>
+                        <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Reserva tu llamada 1:1</h3>
+                        {!isLocked && callsPerMonth > 0 && (
+                          <p className="font-dm-sans text-xs text-gray-500">
+                            Tienes derecho a {callsPerMonth} llamada{callsPerMonth > 1 ? 's' : ''} 1:1 por mes
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {isLocked ? (
+                      <div className="bg-gray-50 rounded-xl px-4 py-3">
+                        <p className="font-dm-sans text-sm text-gray-400 flex items-center gap-2">
+                          <span>🔒</span>
+                          {level === 'Initiation'
+                            ? 'Las llamadas 1:1 se desbloquean en Growth'
+                            : 'Disponible a partir de Growth'}
+                        </p>
+                      </div>
+                    ) : bookingLink ? (
+                      <a
+                        href={bookingLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-3 rounded-xl hover:bg-brand-green/90 transition"
+                      >
+                        Agendar llamada →
+                      </a>
+                    ) : (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <p className="font-dm-sans text-sm text-amber-700">
+                          Tu link de agendamiento estará disponible pronto
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Campaigns (Foundation+ only) */}
             {canSeeCampaigns(level) && campaigns.length > 0 && (

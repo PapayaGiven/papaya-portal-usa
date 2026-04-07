@@ -30,6 +30,8 @@ function emptyProduct(): StrategyProductInput {
     is_retainer: false,
     campaign_id: null,
     brief_url: null,
+    video_focus: '',
+    quick_checklist: [],
     videos: [],
   }
 }
@@ -77,6 +79,8 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
         is_retainer: (p.is_retainer as boolean) ?? false,
         campaign_id: (p.campaign_id as string | null) ?? null,
         brief_url: (p.brief_url as string | null) ?? null,
+        video_focus: (p.video_focus as string) ?? '',
+        quick_checklist: (p.quick_checklist as string[]) ?? [],
         videos: ((p.videos ?? []) as Record<string, unknown>[]).map((v) => ({
           video_url: (v.video_url as string) ?? '',
           thumbnail_url: (v.thumbnail_url as string) ?? '',
@@ -295,6 +299,57 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                   placeholder="Tips, temas de enfoque, Dos & Don'ts para este producto…"
                   className="input-field w-full resize-none"
                 />
+              </div>
+
+              {/* Video Focus */}
+              <div>
+                <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Enfoque del video</label>
+                <input
+                  type="text"
+                  value={sp.video_focus}
+                  onChange={(e) => updateProduct(pi, { video_focus: e.target.value })}
+                  placeholder="ej. Antes/después + estatura"
+                  className="input-field w-full"
+                />
+              </div>
+
+              {/* Quick Checklist */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-dm-sans text-xs font-medium text-gray-500">Checklist rápido (máx. 5)</label>
+                  {sp.quick_checklist.length < 5 && (
+                    <button
+                      type="button"
+                      onClick={() => updateProduct(pi, { quick_checklist: [...sp.quick_checklist, ''] })}
+                      className="font-dm-sans text-xs font-semibold text-brand-green hover:underline"
+                    >
+                      + Agregar item
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {sp.quick_checklist.map((item, ci) => (
+                    <div key={ci} className="flex gap-2 items-center">
+                      <span className="text-green-500 text-sm shrink-0">✓</span>
+                      <input
+                        type="text"
+                        value={item}
+                        onChange={(e) => {
+                          const updated = [...sp.quick_checklist]
+                          updated[ci] = e.target.value
+                          updateProduct(pi, { quick_checklist: updated })
+                        }}
+                        placeholder="ej. Talla, Ajuste, Outfits..."
+                        className="input-field flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateProduct(pi, { quick_checklist: sp.quick_checklist.filter((_, i) => i !== ci) })}
+                        className="text-red-400 hover:text-red-600 px-2 shrink-0"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Brief URL */}
