@@ -43,6 +43,7 @@ export default function Nav({ level }: NavProps) {
             <span className="font-dm-sans font-semibold text-brand-black text-sm tracking-wide hidden sm:block">
               Papaya Social Club
             </span>
+            <span className="hidden sm:inline font-dm-sans text-xs font-bold text-white px-2 py-0.5 rounded-full" style={{ backgroundColor: '#F4A7C3' }}>🇺🇸 USA</span>
           </Link>
 
           {/* Desktop links */}

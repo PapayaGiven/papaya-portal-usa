@@ -2246,6 +2246,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
                 height={32}
               />
               <p className="font-playfair text-lg text-white leading-none">Admin Panel</p>
+              <span className="font-dm-sans text-xs font-semibold text-white px-2.5 py-1 rounded-full" style={{ backgroundColor: '#F4A7C3' }}>🇺🇸 United States</span>
             </div>
             <div className="flex items-center gap-3">
               <a href="/" className="font-dm-sans text-sm text-white/40 hover:text-white transition px-3 py-1.5 rounded-lg hover:bg-white/5">
