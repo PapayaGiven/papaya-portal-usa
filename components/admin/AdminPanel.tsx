@@ -3,16 +3,18 @@
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
+import { Creator, Product, Campaign, CreatorLevel, ProductType, PRODUCT_TYPE_LABELS, PRODUCT_TYPE_COLORS } from '@/lib/types'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, resendInvite,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, resendInvite,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
   updateLevel, seedDefaultLevels, addReward, updateReward, deleteReward, confirmRewardReceived,
   updateSettings,
+  updateLevelConfig,
+  addDeliverable, updateDeliverableStatus, deleteDeliverable,
 } from '@/app/admin/actions'
 import { SiteSettings } from '@/lib/types'
 
@@ -84,6 +86,37 @@ interface CreatorRewardRow {
   reward: { title: string; level_name: string } | null
 }
 
+interface DeliverableRow {
+  id: string
+  creator_id: string
+  brand_name: string
+  deliverable_type: string
+  due_date: string | null
+  status: string
+  notes: string | null
+  created_at: string
+  creator?: { name: string | null; email: string } | null
+}
+
+interface LevelConfigRow {
+  level_name: string
+  videos_per_day: number
+  hero_products: number
+  hero_videos_each: number
+  sub_hero_products: number
+  sub_hero_videos_each: number
+  complementary_videos: number
+  winner_videos: number
+  has_creative_bank: boolean
+  has_deliverables_board: boolean
+  has_brand_pipeline: boolean
+  has_retainer: boolean
+  calls_per_month: number
+  call_frequency: string
+  has_masterclass: boolean
+  has_mastermind: boolean
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
@@ -95,15 +128,17 @@ interface AdminPanelProps {
   rewards: RewardRow[]
   creatorRewards: CreatorRewardRow[]
   settings: SiteSettings | null
+  deliverables: DeliverableRow[]
+  levelConfigs: LevelConfigRow[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
 const LEVEL_COLORS: Record<CreatorLevel, string> = {
-  Initiation: 'bg-gray-100 text-gray-600',
-  Foundation: 'bg-pink-100 text-pink-700',
-  Growth: 'bg-emerald-100 text-emerald-700',
-  Scale: 'bg-purple-100 text-purple-700',
-  Elite: 'bg-amber-100 text-amber-700',
+  Initiation: 'bg-[#F1EFE8] text-[#444441]',
+  Foundation: 'bg-[#E6F1FB] text-[#0C447C]',
+  Growth: 'bg-[#E1F5EE] text-[#085041]',
+  Scale: 'bg-[#EEEDFE] text-[#3C3489]',
+  Elite: 'bg-[#FAEEDA] text-[#633806]',
 }
 
 const DEFAULT_TAGS = ['viral', 'evergreen', 'seasonal', 'trending', 'new']
@@ -133,6 +168,7 @@ function Feedback({ msg }: { msg: string | null }) {
 function CreatorsTab({ creators, products: _products }: { creators: Creator[]; products: Product[] }) {
   const [editingGMV, setEditingGMV] = useState<{ id: string; value: string } | null>(null)
   const [editingGoal, setEditingGoal] = useState<{ id: string; value: string } | null>(null)
+  const [editingVideos, setEditingVideos] = useState<{ id: string; value: string } | null>(null)
   const [expandedElite, setExpandedElite] = useState<string | null>(null)
   const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string; booking_link: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '', booking_link: '' })
   const [showAdd, setShowAdd] = useState(false)
@@ -207,14 +243,14 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Status', 'Actions', 'Elite'].map((h) => (
+              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Videos/día', 'Status', 'Actions', 'Elite'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {creators.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
             )}
             {creators.map((c) => (
               <>
@@ -297,6 +333,38 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                   )}
                 </td>
                 <td className="px-4 py-3">
+                  {editingVideos?.id === c.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        value={editingVideos.value}
+                        onChange={(e) => setEditingVideos({ id: c.id, value: e.target.value })}
+                        className="w-16 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-pink"
+                        autoFocus
+                        placeholder="—"
+                      />
+                      <button
+                        onClick={() => startTransition(async () => {
+                          const val = editingVideos.value ? parseInt(editingVideos.value) : null
+                          const r = await updateCreatorVideosOverride(c.id, val)
+                          if (r.error) fb(`Error: ${r.error}`)
+                          else fb('✓ Videos override saved')
+                          setEditingVideos(null)
+                        })}
+                        className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
+                      >✓</button>
+                      <button onClick={() => setEditingVideos(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setEditingVideos({ id: c.id, value: c.custom_videos_per_day != null ? String(c.custom_videos_per_day) : '' })}
+                      className="text-brand-black hover:underline hover:text-brand-green"
+                    >
+                      {c.custom_videos_per_day != null ? c.custom_videos_per_day : <span className="text-gray-400 text-xs">Default</span>}
+                    </button>
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${c.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                     {c.is_active ? 'Active' : 'Inactive'}
@@ -353,7 +421,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
               </tr>
               {expandedElite === c.id && (
                 <tr key={`${c.id}-elite`} className="bg-amber-50/50">
-                  <td colSpan={8} className="px-6 py-4">
+                  <td colSpan={9} className="px-6 py-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
@@ -439,10 +507,12 @@ function ProductsTab({ products }: { products: Product[] }) {
   const [form, setForm] = useState({
     name: '', commission_rate: '', conversion_rate: '', niche: '',
     is_exclusive: false, image_url: '', product_link: '', tags: [] as string[],
+    product_type: 'hero' as ProductType,
   })
   const [editForm, setEditForm] = useState<Partial<{
     name: string; commission_rate: number; conversion_rate: number
     niche: string; is_exclusive: boolean; image_url: string | null; product_link: string | null; tags: string[]
+    product_type: ProductType
   }>>({})
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -515,6 +585,14 @@ function ProductsTab({ products }: { products: Product[] }) {
             <input placeholder="Niche (e.g. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
             <input placeholder="Image URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
             <input placeholder="Product link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <div>
+              <select value={form.product_type} onChange={(e) => setForm((f) => ({ ...f, product_type: e.target.value as ProductType }))} className="input-field w-full">
+                <option value="hero">Hero</option>
+                <option value="sub_hero">Sub-hero</option>
+                <option value="complementary">Complementary</option>
+                <option value="winner">Winner</option>
+              </select>
+            </div>
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
               <input type="checkbox" checked={form.is_exclusive} onChange={(e) => setForm((f) => ({ ...f, is_exclusive: e.target.checked }))} className="rounded" />
               Exclusive
@@ -553,11 +631,12 @@ function ProductsTab({ products }: { products: Product[] }) {
                 image_url: form.image_url || null,
                 product_link: form.product_link || null,
                 tags: form.tags,
+                product_type: form.product_type,
               })
               if (r.error) fb(`Error: ${r.error}`)
               else {
                 fb('✓ Product added')
-                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', tags: [] })
+                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', tags: [], product_type: 'hero' })
                 setShowAdd(false)
               }
             })}
@@ -574,14 +653,14 @@ function ProductsTab({ products }: { products: Product[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Image', 'Name', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Initiation', 'Actions'].map((h) => (
+              {['Image', 'Name', 'Tipo', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Initiation', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {products.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
             )}
             {products.map((p) => (
               <>
@@ -599,6 +678,11 @@ function ProductsTab({ products }: { products: Product[] }) {
                       <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline">Link →</a>
                     )}
                   </div>
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${PRODUCT_TYPE_COLORS[(p.product_type ?? 'hero') as ProductType]}`}>
+                    {PRODUCT_TYPE_LABELS[(p.product_type ?? 'hero') as ProductType]}
+                  </span>
                 </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{p.commission_rate}%</td>
                 <td className="px-4 py-3">
@@ -644,6 +728,7 @@ function ProductsTab({ products }: { products: Product[] }) {
                           image_url: p.image_url ?? '',
                           product_link: p.product_link ?? '',
                           tags: p.tags ?? [],
+                          product_type: (p.product_type ?? 'hero') as ProductType,
                         })
                       }
                     }} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">
@@ -659,11 +744,20 @@ function ProductsTab({ products }: { products: Product[] }) {
               </tr>
               {editingId === p.id && (
                 <tr key={`${p.id}-edit`} className="bg-brand-light-pink/50">
-                  <td colSpan={8} className="px-6 py-4">
+                  <td colSpan={9} className="px-6 py-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Name</p>
                         <input value={editForm.name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Tipo de producto</p>
+                        <select value={editForm.product_type ?? 'hero'} onChange={(e) => setEditForm((f) => ({ ...f, product_type: e.target.value as ProductType }))} className="input-field w-full">
+                          <option value="hero">Hero</option>
+                          <option value="sub_hero">Sub-hero</option>
+                          <option value="complementary">Complementary</option>
+                          <option value="winner">Winner</option>
+                        </select>
                       </div>
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Commission %</p>
@@ -1848,10 +1942,278 @@ function RewardsTab({ rewards, creatorRewards, levels }: { rewards: RewardRow[];
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings'
+// ── Deliverables Tab ─────────────────────────────────────────────────────────
+function DeliverablesTab({ deliverables, creators }: { deliverables: DeliverableRow[]; creators: Creator[] }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ creator_id: '', brand_name: '', deliverable_type: 'video', due_date: '', notes: '' })
+  const [filterCreator, setFilterCreator] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings }: AdminPanelProps) {
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  const filtered = deliverables.filter((d) => {
+    if (filterCreator && d.creator_id !== filterCreator) return false
+    if (filterStatus && d.status !== filterStatus) return false
+    return true
+  })
+
+  const STATUS_OPTIONS = [
+    { value: 'pending', label: 'Pendiente', style: 'bg-gray-100 text-gray-600' },
+    { value: 'delivered', label: 'Entregado', style: 'bg-emerald-100 text-emerald-700' },
+    { value: 'approved', label: 'Aprobado', style: 'bg-emerald-200 text-emerald-800' },
+  ]
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Entregas</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
+          {showAdd ? 'Cancelar' : '+ Nueva entrega'}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
+          <h3 className="font-dm-sans font-semibold text-sm mb-3 text-brand-black">Nueva entrega</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <select value={form.creator_id} onChange={(e) => setForm((f) => ({ ...f, creator_id: e.target.value }))} className="input-field">
+              <option value="">Seleccionar creadora</option>
+              {creators.map((c) => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
+            </select>
+            <input placeholder="Nombre de marca" value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field" />
+            <select value={form.deliverable_type} onChange={(e) => setForm((f) => ({ ...f, deliverable_type: e.target.value }))} className="input-field">
+              <option value="video">Video</option>
+              <option value="live">Live</option>
+              <option value="story">Story</option>
+              <option value="reel">Reel</option>
+              <option value="post">Post</option>
+              <option value="other">Otro</option>
+            </select>
+            <input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className="input-field" />
+            <input placeholder="Notas (opcional)" value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="input-field sm:col-span-2" />
+          </div>
+          <button
+            disabled={isPending || !form.creator_id || !form.brand_name}
+            onClick={() => startTransition(async () => {
+              const r = await addDeliverable({
+                creator_id: form.creator_id,
+                brand_name: form.brand_name,
+                deliverable_type: form.deliverable_type,
+                due_date: form.due_date || null,
+                notes: form.notes || null,
+              })
+              if (r.error) fb(`Error: ${r.error}`)
+              else { fb('✓ Entrega creada'); setForm({ creator_id: '', brand_name: '', deliverable_type: 'video', due_date: '', notes: '' }); setShowAdd(false) }
+            })}
+            className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+          >
+            {isPending ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+
+      <Feedback msg={feedback} />
+
+      {/* Filters */}
+      <div className="flex gap-3 mb-4">
+        <select value={filterCreator} onChange={(e) => setFilterCreator(e.target.value)} className="input-field text-sm">
+          <option value="">Todas las creadoras</option>
+          {creators.map((c) => <option key={c.id} value={c.id}>{c.name || c.email}</option>)}
+        </select>
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="input-field text-sm">
+          <option value="">Todos los estados</option>
+          {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+        </select>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <table className="w-full text-sm font-dm-sans">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              {['Creadora', 'Marca', 'Tipo', 'Fecha', 'Estado', 'Notas', 'Acciones'].map((h) => (
+                <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {filtered.length === 0 && (
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">No hay entregas.</td></tr>
+            )}
+            {filtered.map((d) => {
+              const statusOpt = STATUS_OPTIONS.find((s) => s.value === d.status) ?? STATUS_OPTIONS[0]
+              return (
+                <tr key={d.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">{d.creator?.name || d.creator?.email || '–'}</td>
+                  <td className="px-4 py-3 text-gray-700">{d.brand_name}</td>
+                  <td className="px-4 py-3 text-gray-500">{d.deliverable_type}</td>
+                  <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{d.due_date ? new Date(d.due_date + 'T12:00:00').toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '–'}</td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={d.status}
+                      disabled={isPending}
+                      onChange={(e) => startTransition(async () => {
+                        const r = await updateDeliverableStatus(d.id, e.target.value)
+                        if (r.error) fb(`Error: ${r.error}`)
+                        else fb('✓ Estado actualizado')
+                      })}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer ${statusOpt.style}`}
+                    >
+                      {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 text-xs max-w-xs truncate">{d.notes || '–'}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      disabled={isPending}
+                      onClick={() => { if (confirm('¿Eliminar esta entrega?')) startTransition(async () => { await deleteDeliverable(d.id); fb('✓ Eliminada') }) }}
+                      className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
+                    >Eliminar</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── Level Config Tab ─────────────────────────────────────────────────────────
+function LevelConfigTab({ levelConfigs }: { levelConfigs: LevelConfigRow[] }) {
+  const [editingLevel, setEditingLevel] = useState<string | null>(null)
+  const [form, setForm] = useState<Partial<LevelConfigRow>>({})
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  function startEdit(lc: LevelConfigRow) {
+    setEditingLevel(lc.level_name)
+    setForm({ ...lc })
+  }
+
+  const isScaleOrElite = (name: string) => name === 'Scale' || name === 'Elite'
+  const isElite = (name: string) => name === 'Elite'
+
+  return (
+    <div>
+      <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Configuración por nivel</h2>
+      <Feedback msg={feedback} />
+
+      <div className="space-y-4">
+        {levelConfigs.map((lc) => (
+          <div key={lc.level_name} className="border border-gray-100 rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-dm-sans font-bold text-brand-black">{lc.level_name}</h3>
+              <button
+                onClick={() => editingLevel === lc.level_name ? setEditingLevel(null) : startEdit(lc)}
+                className="font-dm-sans text-sm font-semibold text-brand-green hover:underline"
+              >
+                {editingLevel === lc.level_name ? 'Cancelar' : 'Editar'}
+              </button>
+            </div>
+
+            {editingLevel === lc.level_name ? (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <div>
+                    <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Videos por día</p>
+                    <input type="number" value={form.videos_per_day ?? ''} onChange={(e) => setForm((f) => ({ ...f, videos_per_day: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Hero productos</p>
+                    <input type="number" value={form.hero_products ?? ''} onChange={(e) => setForm((f) => ({ ...f, hero_products: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Hero videos c/u</p>
+                    <input type="number" value={form.hero_videos_each ?? ''} onChange={(e) => setForm((f) => ({ ...f, hero_videos_each: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                  </div>
+                  {isScaleOrElite(lc.level_name) && (
+                    <>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Sub-hero productos</p>
+                        <input type="number" value={form.sub_hero_products ?? ''} onChange={(e) => setForm((f) => ({ ...f, sub_hero_products: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Sub-hero videos c/u</p>
+                        <input type="number" value={form.sub_hero_videos_each ?? ''} onChange={(e) => setForm((f) => ({ ...f, sub_hero_videos_each: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Videos complementarios</p>
+                    <input type="number" value={form.complementary_videos ?? ''} onChange={(e) => setForm((f) => ({ ...f, complementary_videos: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                  </div>
+                  {isElite(lc.level_name) && (
+                    <div>
+                      <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Videos ganadores</p>
+                      <input type="number" value={form.winner_videos ?? ''} onChange={(e) => setForm((f) => ({ ...f, winner_videos: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Llamadas/mes</p>
+                    <input type="number" value={form.calls_per_month ?? ''} onChange={(e) => setForm((f) => ({ ...f, calls_per_month: parseInt(e.target.value) || 0 }))} className="input-field w-full" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4 mt-2">
+                  <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
+                    <input type="checkbox" checked={form.has_creative_bank ?? false} onChange={(e) => setForm((f) => ({ ...f, has_creative_bank: e.target.checked }))} className="rounded" />
+                    Banco creativo
+                  </label>
+                  <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
+                    <input type="checkbox" checked={form.has_deliverables_board ?? false} onChange={(e) => setForm((f) => ({ ...f, has_deliverables_board: e.target.checked }))} className="rounded" />
+                    Tablero de entregas
+                  </label>
+                  <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
+                    <input type="checkbox" checked={form.has_brand_pipeline ?? false} onChange={(e) => setForm((f) => ({ ...f, has_brand_pipeline: e.target.checked }))} className="rounded" />
+                    Pipeline de marcas
+                  </label>
+                </div>
+                <button
+                  disabled={isPending}
+                  onClick={() => startTransition(async () => {
+                    const r = await updateLevelConfig(lc.level_name, form)
+                    if (r.error) fb(`Error: ${r.error}`)
+                    else { fb('✓ Configuración guardada'); setEditingLevel(null) }
+                  })}
+                  className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+                >
+                  {isPending ? 'Guardando...' : 'Guardar'}
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 font-dm-sans text-sm">
+                <div><span className="text-gray-400">Videos/día:</span> <span className="font-semibold">{lc.videos_per_day}</span></div>
+                <div><span className="text-gray-400">Hero:</span> <span className="font-semibold">{lc.hero_products}×{lc.hero_videos_each}</span></div>
+                {isScaleOrElite(lc.level_name) && <div><span className="text-gray-400">Sub-hero:</span> <span className="font-semibold">{lc.sub_hero_products}×{lc.sub_hero_videos_each}</span></div>}
+                <div><span className="text-gray-400">Complementarios:</span> <span className="font-semibold">{lc.complementary_videos}</span></div>
+                {isElite(lc.level_name) && <div><span className="text-gray-400">Ganadores:</span> <span className="font-semibold">{lc.winner_videos}</span></div>}
+                <div><span className="text-gray-400">Llamadas:</span> <span className="font-semibold">{lc.calls_per_month}/mes</span></div>
+                <div className="col-span-2 sm:col-span-4 flex flex-wrap gap-2 mt-1">
+                  {lc.has_creative_bank && <span className="text-xs bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full">Banco creativo</span>}
+                  {lc.has_deliverables_board && <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Entregas</span>}
+                  {lc.has_brand_pipeline && <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Pipeline</span>}
+                  {lc.has_retainer && <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Retainer</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {levelConfigs.length === 0 && (
+          <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No hay configuración de niveles. Ejecuta el SQL para crear la tabla level_config.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -1863,9 +2225,11 @@ export default function AdminPanel({ creators, products, campaigns, applications
     { id: 'products', label: 'Products', count: products.length },
     { id: 'strategy', label: 'Strategy' },
     { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
+    { id: 'deliverables', label: 'Entregas', count: deliverables.length },
     { id: 'levels', label: 'Niveles', count: levels.length },
     { id: 'rewards', label: 'Recompensas', count: rewards.length },
     { id: 'settings', label: 'Settings' },
+    { id: 'config', label: 'Configuración' },
   ]
 
   return (
@@ -1938,6 +2302,8 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'levels' && <LevelsTab levels={levels} />}
           {activeTab === 'rewards' && <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />}
           {activeTab === 'settings' && <SettingsTab settings={settings} />}
+          {activeTab === 'deliverables' && <DeliverablesTab deliverables={deliverables} creators={creators} />}
+          {activeTab === 'config' && <LevelConfigTab levelConfigs={levelConfigs} />}
         </div>
       </div>
     </div>

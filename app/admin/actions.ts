@@ -35,10 +35,10 @@ export async function updateCreatorGMV(id: string, gmv: number): Promise<{ error
   const supabase = createAdminClient()
 
   let newLevel: CreatorLevel = 'Initiation'
-  if (gmv >= 10000) newLevel = 'Elite'
-  else if (gmv >= 5000) newLevel = 'Scale'
-  else if (gmv >= 1000) newLevel = 'Growth'
-  else if (gmv >= 300) newLevel = 'Foundation'
+  if (gmv >= 150000) newLevel = 'Elite'
+  else if (gmv >= 30000) newLevel = 'Scale'
+  else if (gmv >= 5000) newLevel = 'Growth'
+  else if (gmv >= 500) newLevel = 'Foundation'
 
   const newTarget = LEVEL_CONFIG[newLevel].target ?? 5000
 
@@ -145,6 +145,7 @@ export async function addProduct(data: {
   image_url: string | null
   product_link: string | null
   tags: string[]
+  product_type?: string
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const { error } = await supabase.from('products').insert(data)
@@ -164,6 +165,7 @@ export async function updateProduct(
     image_url: string | null
     product_link: string | null
     tags: string[]
+    product_type: string
   }>
 ): Promise<{ error?: string }> {
   const supabase = createAdminClient()
@@ -397,6 +399,15 @@ export async function confirmRewardReceived(creatorRewardId: string, confirmed: 
 
 // ── Creator Elite Settings ─────────────────────────────────────────────────────
 
+export async function updateCreatorVideosOverride(id: string, videosPerDay: number | null): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creators').update({ custom_videos_per_day: videosPerDay }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
 export async function updateCreatorEliteSettings(
   id: string,
   data: {
@@ -557,5 +568,83 @@ export async function updateSettings(data: {
 
   revalidatePath('/admin')
   revalidatePath('/dashboard')
+  return {}
+}
+
+// ── Level Config ─────────────────────────────────────────────────────────────
+
+export async function updateLevelConfig(
+  levelName: string,
+  data: Partial<{
+    videos_per_day: number
+    hero_products: number
+    hero_videos_each: number
+    sub_hero_products: number
+    sub_hero_videos_each: number
+    complementary_videos: number
+    winner_videos: number
+    has_creative_bank: boolean
+    has_deliverables_board: boolean
+    has_brand_pipeline: boolean
+    has_retainer: boolean
+    calls_per_month: number
+    call_frequency: string
+    has_masterclass: boolean
+    has_mastermind: boolean
+  }>
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('level_config').update(data).eq('level_name', levelName)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  revalidatePath('/strategy')
+  return {}
+}
+
+// ── Deliverables ─────────────────────────────────────────────────────────────
+
+export async function addDeliverable(data: {
+  creator_id: string
+  brand_name: string
+  deliverable_type: string
+  due_date: string | null
+  notes: string | null
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('deliverables').insert(data)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/deliverables')
+  return {}
+}
+
+export async function updateDeliverableStatus(id: string, status: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('deliverables').update({ status }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/deliverables')
+  return {}
+}
+
+export async function deleteDeliverable(id: string): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase.from('deliverables').delete().eq('id', id)
+  revalidatePath('/admin')
+  revalidatePath('/deliverables')
+}
+
+// ── Strategy Products Creative Bank ──────────────────────────────────────────
+
+export async function updateStrategyProductCreative(
+  id: string,
+  data: { hooks?: string[]; scripts?: string | null; trends?: string | null }
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('strategy_products').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/strategy')
   return {}
 }

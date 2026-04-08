@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { CreatorLevel } from '@/lib/types'
+import { CreatorLevel, LEVEL_BADGE_COLORS } from '@/lib/types'
 import { getNavLinks } from '@/lib/levelAccess'
 
 interface NavProps {
@@ -67,9 +67,15 @@ export default function Nav({ level }: NavProps) {
 
           {/* Right side: level badge + sign out */}
           <div className="flex items-center gap-3">
-            {level === 'Elite' && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 font-dm-sans text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full">
-                👑 Elite
+            {level && (
+              <span
+                className="hidden sm:inline-flex items-center gap-1.5 font-dm-sans text-xs font-bold px-3 py-1 rounded-full"
+                style={{
+                  backgroundColor: LEVEL_BADGE_COLORS[level]?.bg ?? '#F1EFE8',
+                  color: LEVEL_BADGE_COLORS[level]?.text ?? '#444441',
+                }}
+              >
+                {level === 'Elite' ? '👑 ' : ''}{level}
               </span>
             )}
             <button

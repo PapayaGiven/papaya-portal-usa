@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { CreatorLevel, LEVEL_BADGE_COLORS } from '@/lib/types'
 
 interface GMVRingProps {
   gmv: number
@@ -52,7 +53,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
             cy="90"
             r={radius}
             fill="none"
-            stroke="#F4A7C3"
+            stroke={LEVEL_BADGE_COLORS[level as CreatorLevel]?.text ?? '#F4A7C3'}
             strokeWidth="12"
             strokeLinecap="round"
             strokeDasharray={circumference}

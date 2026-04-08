@@ -1,9 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
 import DailyChecklist from '@/components/DailyChecklist'
-import { StrategyProduct, CreatorLevel } from '@/lib/types'
+import StrategyTabs from '@/components/StrategyTabs'
+import { StrategyProduct, CreatorLevel, LevelConfig } from '@/lib/types'
 import { canSeeHashtags, canSeeExampleVideos } from '@/lib/levelAccess'
 
 const PRIORITY_STYLES = {
@@ -110,6 +112,51 @@ export default async function StrategyPage() {
     }
   }
 
+  // Fetch level_config for calendar
+  const admin = createAdminClient()
+  let levelConfigData: LevelConfig | null = null
+  if (creator) {
+    const { data: lcData } = await admin.from('level_config').select('*').eq('level_name', level).maybeSingle()
+    levelConfigData = lcData as LevelConfig | null
+  }
+
+  // Fetch weekly calendar completions
+  const weeklyChecklist: { date: string; completed: boolean }[] = []
+  if (creator) {
+    const now2 = new Date()
+    const day = now2.getDay()
+    const diff = day === 0 ? -6 : 1 - day
+    const monday = new Date(now2)
+    monday.setDate(now2.getDate() + diff)
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    const monStr = monday.toISOString().split('T')[0]
+    const sunStr = sunday.toISOString().split('T')[0]
+
+    const { data: calData } = await supabase
+      .from('daily_checklist')
+      .select('date, video_posted')
+      .eq('creator_id', creator.id)
+      .eq('strategy_product_id', '00000000-0000-0000-0000-000000000000')
+      .gte('date', monStr)
+      .lte('date', sunStr)
+
+    for (const row of calData ?? []) {
+      weeklyChecklist.push({ date: row.date, completed: row.video_posted })
+    }
+  }
+
+  // Creative bank data from strategy_products
+  const creativeProducts = strategyProducts
+    .filter((sp) => sp.product)
+    .map((sp) => ({
+      id: sp.id,
+      productName: (sp.product as { name: string })?.name ?? 'Producto',
+      hooks: (sp as unknown as { hooks?: string[] }).hooks ?? [],
+      scripts: (sp as unknown as { scripts?: string | null }).scripts ?? null,
+      trends: (sp as unknown as { trends?: string | null }).trends ?? null,
+    }))
+
   const hasChecklist = strategyProducts.some(
     (sp) => (sp.videos_per_day ?? 0) > 0 || (sp.live_hours_per_week ?? 0) > 0
   )
@@ -149,177 +196,200 @@ export default async function StrategyPage() {
           </div>
         )}
 
-        {/* No strategy yet */}
-        {(!strategyId || strategyProducts.length === 0) ? (
+        {/* Tabbed content */}
+        {creator && (
+          <StrategyTabs
+            level={level}
+            creatorId={creator.id}
+            weeklyChecklist={weeklyChecklist}
+            levelConfigVideosPerDay={levelConfigData?.videos_per_day ?? 3}
+            creativeProducts={creativeProducts}
+            productsContent={
+              (!strategyId || strategyProducts.length === 0) ? (
+                <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
+                  <p className="text-4xl mb-3">📋</p>
+                  <h2 className="font-playfair text-2xl text-brand-black mb-2">
+                    Aún no hay estrategia para {monthLabel}
+                  </h2>
+                  <p className="font-dm-sans text-gray-500 text-sm">
+                    Tu agencia creará tu estrategia mensual pronto.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {strategyProducts.map((sp) => {
+                    const priorityStyle = PRIORITY_STYLES[sp.priority] ?? PRIORITY_STYLES.Supporting
+                    const product = sp.product as { name: string; niche: string | null; commission_rate: number | null; image_url: string | null } | null
+                    const campaign = sp.campaign as { brand_name: string } | null
+
+                    return (
+                      <div key={sp.id} className="bg-white rounded-2xl border border-brand-pink/20 shadow-sm overflow-hidden">
+                        {/* Product header */}
+                        <div className="px-6 py-5 border-b border-gray-50 flex items-start justify-between gap-4">
+                          <div className="flex items-center gap-4">
+                            {product?.image_url ? (
+                              <img
+                                src={product.image_url}
+                                alt={product?.name}
+                                className="w-14 h-14 object-cover rounded-xl border border-gray-100 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-xl bg-brand-light-pink flex items-center justify-center shrink-0">
+                                <span className="font-playfair text-2xl text-brand-pink">
+                                  {product?.name?.charAt(0) ?? '?'}
+                                </span>
+                              </div>
+                            )}
+                            <div>
+                              <h2 className="font-playfair text-xl text-brand-black leading-tight">
+                                {product?.name ?? 'Product'}
+                              </h2>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {product?.niche && (
+                                  <span className="font-dm-sans text-xs bg-brand-light-pink text-brand-green px-2 py-0.5 rounded-full">
+                                    {product.niche}
+                                  </span>
+                                )}
+                                {product?.commission_rate != null && (
+                                  <span className="font-dm-sans text-xs font-bold text-brand-pink">
+                                    {product.commission_rate}% Comisión
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col items-end gap-2 shrink-0">
+                            <span className={`font-dm-sans text-xs font-bold px-3 py-1 rounded-full ${priorityStyle.badge}`}>
+                              {sp.priority}
+                            </span>
+                            {sp.is_retainer && (
+                              <span className="font-dm-sans text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                                Campaña Retainer
+                              </span>
+                            )}
+                            {campaign && (
+                              <span className="font-dm-sans text-xs text-gray-400">{campaign.brand_name}</span>
+                            )}
+                            {sp.brief_url && (
+                              <a
+                                href={sp.brief_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-dm-sans text-xs font-semibold text-brand-green hover:underline"
+                              >
+                                Ver brief →
+                              </a>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Stats */}
+                        <div className="grid grid-cols-3 divide-x divide-gray-50 border-b border-gray-50">
+                          <div className="px-5 py-4 text-center">
+                            <p className="font-playfair text-2xl font-bold text-brand-black">{sp.videos_per_day ?? '–'}</p>
+                            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Día</p>
+                          </div>
+                          <div className="px-5 py-4 text-center">
+                            <p className="font-playfair text-2xl font-bold text-brand-black">{sp.live_hours_per_week ?? '–'}h</p>
+                            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Semana</p>
+                          </div>
+                          <div className="px-5 py-4 text-center">
+                            <p className="font-playfair text-2xl font-bold text-brand-green">
+                              {sp.gmv_target != null ? `$${Number(sp.gmv_target).toLocaleString('en-US')}` : '–'}
+                            </p>
+                            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Meta GMV</p>
+                          </div>
+                        </div>
+
+                        {/* Video Focus */}
+                        {sp.video_focus && (
+                          <div className="px-6 py-4 border-b border-gray-50">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                              <span className="text-xl shrink-0 mt-0.5">🎯</span>
+                              <div>
+                                <h3 className="font-dm-sans text-xs font-semibold text-amber-700 uppercase tracking-widest mb-1">Enfoque del video</h3>
+                                <p className="font-dm-sans text-sm text-amber-900 leading-relaxed">{sp.video_focus}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Quick Checklist */}
+                        {sp.quick_checklist && sp.quick_checklist.length > 0 && (
+                          <div className="px-6 py-4 border-b border-gray-50">
+                            <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Checklist rápido</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {sp.quick_checklist.map((item, i) => (
+                                <span key={i} className="inline-flex items-center gap-1.5 font-dm-sans text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+                                  <span className="text-emerald-500">✓</span> {item}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Strategy note */}
+                        {sp.strategy_note && (
+                          <div className="px-6 py-4 border-b border-gray-50">
+                            <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Estrategia</h3>
+                            <p className="font-dm-sans text-sm text-gray-700 leading-relaxed whitespace-pre-line">{sp.strategy_note}</p>
+                          </div>
+                        )}
+
+                        {/* Hashtags — Growth+ only */}
+                        {showHashtags && sp.hashtags && sp.hashtags.length > 0 && (
+                          <div className="px-6 py-4 border-b border-gray-50">
+                            <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Hashtags</h3>
+                            <div className="flex flex-wrap gap-2">
+                              {sp.hashtags.map((tag, i) => (
+                                <span key={i} className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-2.5 py-1 rounded-full">
+                                  #{tag.replace('#', '')}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Example videos — Growth+ only */}
+                        {showVideos && sp.videos && sp.videos.length > 0 && (
+                          <div className="px-6 py-4">
+                            <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Videos de ejemplo</h3>
+                            <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                              {sp.videos.map((video) => (
+                                <VideoCard key={video.id} video={video} />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Locked hint: hashtags/videos locked */}
+                        {!showHashtags && (sp.hashtags?.length ?? 0) > 0 && (
+                          <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50">
+                            <p className="font-dm-sans text-xs text-gray-400">
+                              🔒 Hashtags y videos de ejemplo se desbloquean en <strong>Growth</strong>.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            }
+          />
+        )}
+
+        {!creator && (
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
             <p className="text-4xl mb-3">📋</p>
             <h2 className="font-playfair text-2xl text-brand-black mb-2">
-              Aún no hay estrategia para {monthLabel}
+              Tu perfil se está configurando
             </h2>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Tu agencia creará tu estrategia mensual pronto.
+              Tu agencia activará tu perfil pronto.
             </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {strategyProducts.map((sp) => {
-              const priorityStyle = PRIORITY_STYLES[sp.priority] ?? PRIORITY_STYLES.Supporting
-              const product = sp.product as { name: string; niche: string | null; commission_rate: number | null; image_url: string | null } | null
-              const campaign = sp.campaign as { brand_name: string } | null
-
-              return (
-                <div key={sp.id} className="bg-white rounded-2xl border border-brand-pink/20 shadow-sm overflow-hidden">
-                  {/* Product header */}
-                  <div className="px-6 py-5 border-b border-gray-50 flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      {product?.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product?.name}
-                          className="w-14 h-14 object-cover rounded-xl border border-gray-100 shrink-0"
-                        />
-                      ) : (
-                        <div className="w-14 h-14 rounded-xl bg-brand-light-pink flex items-center justify-center shrink-0">
-                          <span className="font-playfair text-2xl text-brand-pink">
-                            {product?.name?.charAt(0) ?? '?'}
-                          </span>
-                        </div>
-                      )}
-                      <div>
-                        <h2 className="font-playfair text-xl text-brand-black leading-tight">
-                          {product?.name ?? 'Product'}
-                        </h2>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {product?.niche && (
-                            <span className="font-dm-sans text-xs bg-brand-light-pink text-brand-green px-2 py-0.5 rounded-full">
-                              {product.niche}
-                            </span>
-                          )}
-                          {product?.commission_rate != null && (
-                            <span className="font-dm-sans text-xs font-bold text-brand-pink">
-                              {product.commission_rate}% Comisión
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <span className={`font-dm-sans text-xs font-bold px-3 py-1 rounded-full ${priorityStyle.badge}`}>
-                        {sp.priority}
-                      </span>
-                      {sp.is_retainer && (
-                        <span className="font-dm-sans text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
-                          Campaña Retainer
-                        </span>
-                      )}
-                      {campaign && (
-                        <span className="font-dm-sans text-xs text-gray-400">{campaign.brand_name}</span>
-                      )}
-                      {sp.brief_url && (
-                        <a
-                          href={sp.brief_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-dm-sans text-xs font-semibold text-brand-green hover:underline"
-                        >
-                          Ver brief →
-                        </a>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="grid grid-cols-3 divide-x divide-gray-50 border-b border-gray-50">
-                    <div className="px-5 py-4 text-center">
-                      <p className="font-playfair text-2xl font-bold text-brand-black">{sp.videos_per_day ?? '–'}</p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Día</p>
-                    </div>
-                    <div className="px-5 py-4 text-center">
-                      <p className="font-playfair text-2xl font-bold text-brand-black">{sp.live_hours_per_week ?? '–'}h</p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Live / Semana</p>
-                    </div>
-                    <div className="px-5 py-4 text-center">
-                      <p className="font-playfair text-2xl font-bold text-brand-green">
-                        {sp.gmv_target != null ? `$${Number(sp.gmv_target).toLocaleString('en-US')}` : '–'}
-                      </p>
-                      <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Meta GMV</p>
-                    </div>
-                  </div>
-
-                  {/* Video Focus */}
-                  {sp.video_focus && (
-                    <div className="px-6 py-4 border-b border-gray-50">
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                        <span className="text-xl shrink-0 mt-0.5">🎯</span>
-                        <div>
-                          <h3 className="font-dm-sans text-xs font-semibold text-amber-700 uppercase tracking-widest mb-1">Enfoque del video</h3>
-                          <p className="font-dm-sans text-sm text-amber-900 leading-relaxed">{sp.video_focus}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick Checklist */}
-                  {sp.quick_checklist && sp.quick_checklist.length > 0 && (
-                    <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Checklist rápido</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {sp.quick_checklist.map((item, i) => (
-                          <span key={i} className="inline-flex items-center gap-1.5 font-dm-sans text-sm font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-                            <span className="text-emerald-500">✓</span> {item}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Strategy note */}
-                  {sp.strategy_note && (
-                    <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Estrategia</h3>
-                      <p className="font-dm-sans text-sm text-gray-700 leading-relaxed whitespace-pre-line">{sp.strategy_note}</p>
-                    </div>
-                  )}
-
-                  {/* Hashtags — Growth+ only */}
-                  {showHashtags && sp.hashtags && sp.hashtags.length > 0 && (
-                    <div className="px-6 py-4 border-b border-gray-50">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Hashtags</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {sp.hashtags.map((tag, i) => (
-                          <span key={i} className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-2.5 py-1 rounded-full">
-                            #{tag.replace('#', '')}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Example videos — Growth+ only */}
-                  {showVideos && sp.videos && sp.videos.length > 0 && (
-                    <div className="px-6 py-4">
-                      <h3 className="font-dm-sans text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Videos de ejemplo</h3>
-                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                        {sp.videos.map((video) => (
-                          <VideoCard key={video.id} video={video} />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Locked hint: hashtags/videos locked */}
-                  {!showHashtags && (sp.hashtags?.length ?? 0) > 0 && (
-                    <div className="px-6 py-3 bg-gray-50/50 border-t border-gray-50">
-                      <p className="font-dm-sans text-xs text-gray-400">
-                        🔒 Hashtags y videos de ejemplo se desbloquean en <strong>Growth</strong>.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
           </div>
         )}
       </main>

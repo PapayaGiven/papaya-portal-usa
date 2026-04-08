@@ -3,15 +3,15 @@ import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
 import RewardCTA from '@/components/RewardCTA'
-import { Creator } from '@/lib/types'
+import { Creator, LEVEL_BADGE_COLORS, CreatorLevel } from '@/lib/types'
 import { LEVEL_ORDER, getLevelIndex } from '@/lib/levelAccess'
 
 const LEVEL_STYLE: Record<string, { emoji: string; color: string }> = {
-  Initiation: { emoji: '🌱', color: '#9CA3AF' },
-  Foundation: { emoji: '🌸', color: '#F4A7C3' },
-  Growth: { emoji: '💚', color: '#1B5E3B' },
-  Scale: { emoji: '🚀', color: '#8B5CF6' },
-  Elite: { emoji: '👑', color: '#F59E0B' },
+  Initiation: { emoji: '🌱', color: '#444441' },
+  Foundation: { emoji: '🌸', color: '#0C447C' },
+  Growth: { emoji: '💚', color: '#085041' },
+  Scale: { emoji: '🚀', color: '#3C3489' },
+  Elite: { emoji: '👑', color: '#633806' },
 }
 
 interface Level {
@@ -132,8 +132,11 @@ export default async function MiProgresoPage() {
           </span>
           <span className="font-dm-sans text-sm font-semibold text-brand-black">Estás en el nivel</span>
           <span
-            className="font-dm-sans text-sm font-bold px-3 py-0.5 rounded-full text-white"
-            style={{ backgroundColor: levels.find((l) => l.name === creator.level)?.color ?? LEVEL_STYLE[creator.level]?.color ?? '#9CA3AF' }}
+            className="font-dm-sans text-sm font-bold px-3 py-0.5 rounded-full"
+            style={{
+              backgroundColor: LEVEL_BADGE_COLORS[creator.level as CreatorLevel]?.bg ?? '#F1EFE8',
+              color: LEVEL_BADGE_COLORS[creator.level as CreatorLevel]?.text ?? '#444441',
+            }}
           >
             {creator.level}
           </span>
@@ -174,7 +177,10 @@ export default async function MiProgresoPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <h2 className="font-playfair text-2xl text-brand-black leading-none">{lvl.name}</h2>
                           {isCurrent && (
-                            <span className="font-dm-sans text-xs font-bold px-2.5 py-0.5 rounded-full text-white" style={{ backgroundColor: lvl.color ?? LEVEL_STYLE[lvl.name]?.color ?? '#9CA3AF' }}>
+                            <span className="font-dm-sans text-xs font-bold px-2.5 py-0.5 rounded-full" style={{
+                              backgroundColor: LEVEL_BADGE_COLORS[lvl.name as CreatorLevel]?.bg ?? '#F1EFE8',
+                              color: LEVEL_BADGE_COLORS[lvl.name as CreatorLevel]?.text ?? '#444441',
+                            }}>
                               Actual
                             </span>
                           )}
@@ -250,9 +256,14 @@ export default async function MiProgresoPage() {
                   {/* Rewards section */}
                   {levelRewards.length > 0 && (
                     <div className="mt-5 pt-4 border-t border-gray-100">
-                      <h3 className={`font-dm-sans text-xs font-semibold uppercase tracking-wider mb-3 ${isFuture ? 'text-gray-300' : 'text-gray-400'}`}>
-                        {isFuture ? `Desbloquea estas recompensas cuando llegues a ${lvl.name}` : 'Recompensas'}
+                      <h3 className={`font-dm-sans text-xs font-semibold uppercase tracking-wider mb-1 ${isFuture ? 'text-gray-300' : 'text-gray-400'}`}>
+                        {isFuture ? `Desbloquea estos milestone gifts cuando llegues a ${lvl.name}` : 'Milestone Gifts'}
                       </h3>
+                      {!isFuture && (
+                        <p className="font-dm-sans text-xs text-gray-400 mb-3">
+                          🎁 Tus milestone gifts — cada nivel trae recompensas físicas que te enviamos directamente.
+                        </p>
+                      )}
                       <div className="space-y-3">
                         {levelRewards.map((reward) => {
                           const claimed = claimedRewardIds.has(reward.id)

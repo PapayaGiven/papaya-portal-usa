@@ -28,3 +28,28 @@ export async function toggleChecklistItem(
   revalidatePath('/strategy')
   return {}
 }
+
+export async function toggleCalendarDay(
+  creatorId: string,
+  date: string,
+  completed: boolean
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from('daily_checklist')
+    .upsert(
+      {
+        creator_id: creatorId,
+        strategy_product_id: '00000000-0000-0000-0000-000000000000',
+        date,
+        video_posted: completed,
+        live_done: false,
+      },
+      { onConflict: 'creator_id,strategy_product_id,date' }
+    )
+
+  if (error) return { error: error.message }
+  revalidatePath('/strategy')
+  return {}
+}

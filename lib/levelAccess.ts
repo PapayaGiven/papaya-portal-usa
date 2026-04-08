@@ -24,6 +24,14 @@ export function hasEliteFeatures(level: CreatorLevel): boolean {
   return level === 'Elite'
 }
 
+export function hasDeliverables(level: CreatorLevel): boolean {
+  return level === 'Scale' || level === 'Elite'
+}
+
+export function hasCreativeBank(level: CreatorLevel): boolean {
+  return level === 'Growth' || level === 'Scale' || level === 'Elite'
+}
+
 export function getNavLinks(level: CreatorLevel | null): { href: string; label: string }[] {
   const base = [
     { href: '/dashboard', label: 'Dashboard' },
@@ -35,14 +43,21 @@ export function getNavLinks(level: CreatorLevel | null): { href: string; label: 
 
   if (!level || level === 'Initiation') return base
 
-  return [
+  const links = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/strategy', label: 'Mi Estrategia' },
     { href: '/products', label: 'Productos' },
     { href: '/campaigns', label: 'Campañas' },
     { href: '/mi-progreso', label: 'Mi Progreso' },
-    { href: '/violations', label: 'Violaciones' },
   ]
+
+  if (level === 'Scale' || level === 'Elite') {
+    links.push({ href: '/deliverables', label: 'Mis Entregas' })
+  }
+
+  links.push({ href: '/violations', label: 'Violaciones' })
+
+  return links
 }
 
 export const LEVEL_ORDER: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']

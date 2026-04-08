@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import confetti from 'canvas-confetti'
-import { CreatorLevel } from '@/lib/types'
+import { CreatorLevel, LEVEL_BADGE_COLORS } from '@/lib/types'
 import { LEVEL_ORDER } from '@/lib/levelAccess'
 
 interface LevelUpCelebrationProps {
@@ -51,8 +51,8 @@ export default function LevelUpCelebration({ creatorId, currentLevel }: LevelUpC
           Has alcanzado
         </p>
         <span
-          className="inline-block font-dm-sans font-bold text-lg px-5 py-2 rounded-full text-white mb-6"
-          style={{ backgroundColor: config.color }}
+          className="inline-block font-dm-sans font-bold text-lg px-5 py-2 rounded-full mb-6"
+          style={{ backgroundColor: LEVEL_BADGE_COLORS[currentLevel]?.bg, color: LEVEL_BADGE_COLORS[currentLevel]?.text }}
         >
           {currentLevel}
         </span>
@@ -70,9 +70,9 @@ export default function LevelUpCelebration({ creatorId, currentLevel }: LevelUpC
 }
 
 const LEVEL_CONFIG_DISPLAY: Record<CreatorLevel, { emoji: string; color: string; message: string }> = {
-  Initiation: { emoji: '��', color: '#9CA3AF', message: '¡Bienvenida a Papaya Social Club! Tu camino comienza aquí.' },
-  Foundation: { emoji: '🌸', color: '#F4A7C3', message: '¡Desbloqueaste campañas, el ranking y beneficios exclusivos!' },
-  Growth: { emoji: '💚', color: '#1B5E3B', message: '¡Estás en Growth! Llamadas de estrategia, sesiones de fotos y más te esperan.' },
-  Scale: { emoji: '🚀', color: '#8B5CF6', message: '¡Nivel Scale alcanzado! Es hora de escalar tu negocio con herramientas avanzadas y soporte dedicado.' },
-  Elite: { emoji: '👑', color: '#F59E0B', message: '¡Llegaste al nivel más alto! Partnership con la agencia y bonos trimestrales de $500.' },
+  Initiation: { emoji: '🌱', color: '#444441', message: '¡Bienvenida a Papaya Social Club! Tu camino comienza aquí.' },
+  Foundation: { emoji: '🌸', color: '#0C447C', message: '¡Desbloqueaste campañas, el ranking y beneficios exclusivos!' },
+  Growth: { emoji: '💚', color: '#085041', message: '¡Estás en Growth! Llamadas de estrategia, sesiones de fotos y más te esperan.' },
+  Scale: { emoji: '🚀', color: '#3C3489', message: '¡Nivel Scale alcanzado! Es hora de escalar tu negocio con herramientas avanzadas y soporte dedicado.' },
+  Elite: { emoji: '👑', color: '#633806', message: '¡Llegaste al nivel más alto! Partnership con la agencia y bonos trimestrales de $500.' },
 }

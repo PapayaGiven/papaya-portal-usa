@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Campaign, Product, LEVEL_CONFIG, StrategyProduct, SiteSettings } from '@/lib/types'
+import { Creator, Campaign, Product, LEVEL_CONFIG, LEVEL_BADGE_COLORS, StrategyProduct, SiteSettings, LevelConfig } from '@/lib/types'
 import Nav from '@/components/Nav'
 import SmartBanner from '@/components/SmartBanner'
 import GMVRing from '@/components/GMVRing'
@@ -13,7 +13,7 @@ import ProductRequestButton from '@/components/ProductRequestButton'
 import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
 import PersonalGoalNotes from '@/components/PersonalGoalNotes'
-import { canSeeCampaigns, hasAccountManager, hasEliteFeatures } from '@/lib/levelAccess'
+import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex } from '@/lib/levelAccess'
 
 function computeBanner(
   creator: Creator,
@@ -151,6 +151,23 @@ export default async function DashboardPage() {
   const { data: settingsData } = await admin.from('settings').select('*').limit(1).maybeSingle()
   const siteSettings = settingsData as SiteSettings | null
 
+  // Fetch level_config for daily video plan
+  let levelConfigData: LevelConfig | null = null
+  if (creator) {
+    const { data: lcData } = await admin.from('level_config').select('*').eq('level_name', creator.level).maybeSingle()
+    levelConfigData = lcData as LevelConfig | null
+  }
+
+  // Fetch deliverables count for Scale/Elite
+  let deliverablesCount = 0
+  if (creator && hasDeliverables(level)) {
+    const { count } = await supabase
+      .from('deliverables')
+      .select('*', { count: 'exact', head: true })
+      .eq('creator_id', creator.id)
+    deliverablesCount = count ?? 0
+  }
+
   const totalVideosPerDay = strategyProducts.reduce((sum, p) => sum + (p.videos_per_day ?? 0), 0)
   const topStratProducts = strategyProducts
     .sort((a, b) => {
@@ -206,8 +223,8 @@ export default async function DashboardPage() {
             <div className="flex items-center gap-2">
               <span className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">Level</span>
               <span
-                className="font-dm-sans font-bold text-sm px-3 py-1 rounded-full text-white"
-                style={{ backgroundColor: levelConfig?.color ?? '#9CA3AF' }}
+                className="font-dm-sans font-bold text-sm px-3 py-1 rounded-full"
+                style={{ backgroundColor: LEVEL_BADGE_COLORS[creator.level]?.bg ?? '#F1EFE8', color: LEVEL_BADGE_COLORS[creator.level]?.text ?? '#444441' }}
               >
                 {creator.level}
               </span>
@@ -310,6 +327,78 @@ export default async function DashboardPage() {
                 </span>
               </a>
             </div>
+
+            {/* Tu plan de hoy */}
+            {creator && levelConfigData && (
+              (() => {
+                const videosPerDay = creator.custom_videos_per_day ?? levelConfigData.videos_per_day
+                const heroVideos = levelConfigData.hero_products * levelConfigData.hero_videos_each
+                const subHeroVideos = levelConfigData.sub_hero_products * levelConfigData.sub_hero_videos_each
+                const levelIdx = getLevelIndex(level)
+                const showSubHero = levelIdx >= 3 // Scale+
+                const showComplementary = levelIdx >= 1 // Foundation+
+                const showWinners = levelIdx >= 4 // Elite
+                return (
+                  <div className="bg-white rounded-2xl border border-brand-pink/20 p-6 mb-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-xl">🎬</div>
+                      <div>
+                        <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Tu plan de hoy</h3>
+                        <p className="font-dm-sans text-xs text-gray-400">Basado en tu nivel {creator.level}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2 mb-4">
+                      <span className="font-playfair text-4xl font-bold text-brand-black">{videosPerDay}</span>
+                      <span className="font-dm-sans text-sm text-gray-500">videos hoy</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between font-dm-sans text-sm">
+                        <span className="text-gray-600">Hero: {levelConfigData.hero_products} productos × {levelConfigData.hero_videos_each} videos</span>
+                        <span className="font-semibold text-brand-black">= {heroVideos} videos</span>
+                      </div>
+                      {showSubHero && subHeroVideos > 0 && (
+                        <div className="flex items-center justify-between font-dm-sans text-sm">
+                          <span className="text-gray-600">Sub-hero: {levelConfigData.sub_hero_products} productos × {levelConfigData.sub_hero_videos_each} videos</span>
+                          <span className="font-semibold text-brand-black">= {subHeroVideos} videos</span>
+                        </div>
+                      )}
+                      {showComplementary && levelConfigData.complementary_videos > 0 && (
+                        <div className="flex items-center justify-between font-dm-sans text-sm">
+                          <span className="text-gray-600">Complementarios</span>
+                          <span className="font-semibold text-brand-black">= {levelConfigData.complementary_videos} videos</span>
+                        </div>
+                      )}
+                      {showWinners && levelConfigData.winner_videos > 0 && (
+                        <div className="flex items-center justify-between font-dm-sans text-sm">
+                          <span className="text-gray-600">Re-amplificación de ganadores</span>
+                          <span className="font-semibold text-brand-black">= {levelConfigData.winner_videos} videos</span>
+                        </div>
+                      )}
+                    </div>
+                    {creator.custom_videos_per_day != null && (
+                      <p className="font-dm-sans text-xs text-amber-600 mt-3">* Videos por día personalizado por tu agencia</p>
+                    )}
+                  </div>
+                )
+              })()
+            )}
+
+            {/* Mis entregas — Scale/Elite only */}
+            {creator && hasDeliverables(level) && (
+              <div className="mb-6">
+                <Link
+                  href="/deliverables"
+                  className="bg-white rounded-2xl border border-brand-pink/20 p-5 flex items-center gap-4 hover:shadow-sm transition group"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-xl">📦</div>
+                  <div className="flex-1">
+                    <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Mis entregas</h3>
+                    <p className="font-dm-sans text-xs text-gray-400">{deliverablesCount} entrega{deliverablesCount !== 1 ? 's' : ''} activas</p>
+                  </div>
+                  <span className="font-dm-sans text-xs font-semibold text-brand-green group-hover:underline">Ver todas →</span>
+                </Link>
+              </div>
+            )}
 
             {/* GMV Ring + Personal Goal / Account Manager / Elite */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

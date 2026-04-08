@@ -15,7 +15,7 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient()
 
-  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes] = await Promise.all([
+  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -57,6 +57,14 @@ export default async function AdminPage() {
       .select('*')
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from('deliverables')
+      .select('*, creator:creators(name, email)')
+      .order('due_date', { ascending: true }),
+    supabase
+      .from('level_config')
+      .select('*')
+      .order('level_name'),
   ])
 
   return (
@@ -73,6 +81,10 @@ export default async function AdminPage() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       creatorRewards={(creatorRewardsRes.data ?? []) as any}
       settings={settingsRes.data ?? null}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      deliverables={(deliverablesRes.data ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      levelConfigs={(levelConfigRes.data ?? []) as any}
     />
   )
 }

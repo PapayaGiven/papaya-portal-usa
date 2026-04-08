@@ -20,6 +20,7 @@ export interface Creator {
   account_manager_whatsapp: string | null
   personal_goal_notes: string | null
   booking_link: string | null
+  custom_videos_per_day: number | null
 }
 
 export interface Product {
@@ -34,6 +35,7 @@ export interface Product {
   tags: string[]
   created_at: string
   approved_for_initiation: boolean
+  product_type: ProductType
 }
 
 export interface Task {
@@ -99,6 +101,9 @@ export interface StrategyProduct {
   brief_url: string | null
   video_focus: string | null
   quick_checklist: string[]
+  hooks: string[]
+  scripts: string | null
+  trends: string | null
   created_at: string
   product?: Product | null
   campaign?: Campaign | null
@@ -147,9 +152,63 @@ export interface SiteSettings {
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {
-  Initiation: { min: 0, max: 299, target: 300, color: '#9CA3AF', next: 'Foundation' },
-  Foundation: { min: 300, max: 999, target: 1000, color: '#F4A7C3', next: 'Growth' },
-  Growth:     { min: 1000, max: 4999, target: 5000, color: '#1B5E3B', next: 'Scale' },
-  Scale:      { min: 5000, max: 9999, target: 10000, color: '#8B5CF6', next: 'Elite' },
-  Elite:      { min: 10000, max: Infinity, target: null, color: '#F59E0B', next: null },
+  Initiation: { min: 0, max: 500, target: 500, color: '#444441', next: 'Foundation' },
+  Foundation: { min: 500, max: 5000, target: 5000, color: '#0C447C', next: 'Growth' },
+  Growth:     { min: 5000, max: 30000, target: 30000, color: '#085041', next: 'Scale' },
+  Scale:      { min: 30000, max: 150000, target: 150000, color: '#3C3489', next: 'Elite' },
+  Elite:      { min: 150000, max: 400000, target: null, color: '#633806', next: null },
+}
+
+export const LEVEL_BADGE_COLORS: Record<CreatorLevel, { bg: string; text: string }> = {
+  Initiation: { bg: '#F1EFE8', text: '#444441' },
+  Foundation: { bg: '#E6F1FB', text: '#0C447C' },
+  Growth:     { bg: '#E1F5EE', text: '#085041' },
+  Scale:      { bg: '#EEEDFE', text: '#3C3489' },
+  Elite:      { bg: '#FAEEDA', text: '#633806' },
+}
+
+export interface LevelConfig {
+  level_name: string
+  videos_per_day: number
+  hero_products: number
+  hero_videos_each: number
+  sub_hero_products: number
+  sub_hero_videos_each: number
+  complementary_videos: number
+  winner_videos: number
+  has_creative_bank: boolean
+  has_deliverables_board: boolean
+  has_brand_pipeline: boolean
+  has_retainer: boolean
+  calls_per_month: number
+  call_frequency: string
+  has_masterclass: boolean
+  has_mastermind: boolean
+}
+
+export type ProductType = 'hero' | 'sub_hero' | 'complementary' | 'winner'
+
+export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
+  hero: 'Hero',
+  sub_hero: 'Sub-hero',
+  complementary: 'Complementary',
+  winner: 'Winner',
+}
+
+export const PRODUCT_TYPE_COLORS: Record<ProductType, string> = {
+  hero: 'bg-pink-100 text-pink-700 border-pink-300',
+  sub_hero: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  complementary: 'bg-blue-100 text-blue-700 border-blue-300',
+  winner: 'bg-amber-100 text-amber-700 border-amber-300',
+}
+
+export interface Deliverable {
+  id: string
+  creator_id: string
+  brand_name: string
+  deliverable_type: string
+  due_date: string | null
+  status: string
+  notes: string | null
+  created_at: string
 }
