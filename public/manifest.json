@@ -1,0 +1,21 @@
+{
+  "name": "Papaya Social Club",
+  "short_name": "Papaya",
+  "description": "La comunidad #1 de latinas en TikTok Shop",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf4f8",
+  "theme_color": "#1B5E3B",
+  "icons": [
+    {
+      "src": "https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
