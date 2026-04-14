@@ -29,11 +29,11 @@ export default function ProductCard({ product }: ProductCardProps) {
 
       {/* Product image */}
       {product.image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={product.image_url}
           alt={product.name}
           className="w-full h-28 object-cover rounded-xl border border-gray-100"
-          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
         />
       )}
 
