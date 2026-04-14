@@ -18,7 +18,7 @@ const PRIORITY_COLORS = {
   Supporting: 'bg-gray-100 text-gray-600 border-gray-200',
 }
 
-function emptyProduct(): StrategyProductInput {
+function emptyProduct(): StrategyProductInput & { is_external?: boolean; external_name?: string; external_brand?: string; external_commission?: string; external_link?: string } {
   return {
     product_id: '',
     priority: 'Secondary',
@@ -33,6 +33,11 @@ function emptyProduct(): StrategyProductInput {
     video_focus: '',
     quick_checklist: [],
     videos: [],
+    is_external: false,
+    external_name: '',
+    external_brand: '',
+    external_commission: '',
+    external_link: '',
   }
 }
 
@@ -42,7 +47,8 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
 
   const [creatorId, setCreatorId] = useState('')
   const [month, setMonth] = useState(defaultMonth.slice(0, 7)) // "YYYY-MM"
-  const [strategyProducts, setStrategyProducts] = useState<StrategyProductInput[]>([emptyProduct()])
+  const [selectedWeek, setSelectedWeek] = useState<number>(1) // week 1-4
+  const [strategyProducts, setStrategyProducts] = useState<(StrategyProductInput & { is_external?: boolean; external_name?: string; external_brand?: string; external_commission?: string; external_link?: string })[]>([emptyProduct()])
   const [hashtagInputs, setHashtagInputs] = useState<string[]>([''])
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -154,7 +160,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
 
       {/* Creator + Month selector */}
       <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
           <div>
             <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Creator</label>
             <select
@@ -176,6 +182,25 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
               onChange={(e) => setMonth(e.target.value)}
               className="input-field w-full"
             />
+          </div>
+          <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Semana</label>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4].map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setSelectedWeek(w)}
+                  className={`font-dm-sans text-sm font-semibold px-3.5 py-2 rounded-xl border transition ${
+                    selectedWeek === w
+                      ? 'bg-brand-black text-white border-brand-black'
+                      : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  S{w}
+                </button>
+              ))}
+            </div>
           </div>
           <button
             disabled={!creatorId || !month || loading || isPending}
@@ -220,35 +245,91 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Product dropdown */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Producto</label>
-                  <select
-                    value={sp.product_id}
-                    onChange={(e) => updateProduct(pi, { product_id: e.target.value })}
-                    className="input-field w-full"
-                  >
-                    <option value="">Seleccionar producto…</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.commission_rate}%)</option>
-                    ))}
-                  </select>
+              {/* External product toggle */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <div
+                  onClick={() => updateProduct(pi, { is_external: !sp.is_external, product_id: '' } as Partial<StrategyProductInput>)}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${sp.is_external ? 'bg-brand-pink' : 'bg-gray-200'}`}
+                >
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sp.is_external ? 'translate-x-5' : 'translate-x-1'}`} />
                 </div>
-                <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Campaña vinculada (opcional)</label>
-                  <select
-                    value={sp.campaign_id ?? ''}
-                    onChange={(e) => updateProduct(pi, { campaign_id: e.target.value || null })}
-                    className="input-field w-full"
-                  >
-                    <option value="">Sin campaña</option>
-                    {campaigns.filter((c) => c.status === 'active').map((c) => (
-                      <option key={c.id} value={c.id}>{c.brand_name}</option>
-                    ))}
-                  </select>
+                <span className="font-dm-sans text-sm text-gray-700">Producto externo (no está en el catálogo)</span>
+              </label>
+
+              {/* Product selection */}
+              {sp.is_external ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Nombre del producto</label>
+                    <input
+                      type="text"
+                      value={sp.external_name ?? ''}
+                      onChange={(e) => updateProduct(pi, { external_name: e.target.value } as Partial<StrategyProductInput>)}
+                      placeholder="ej. Serum Vitamina C"
+                      className="input-field w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Marca</label>
+                    <input
+                      type="text"
+                      value={sp.external_brand ?? ''}
+                      onChange={(e) => updateProduct(pi, { external_brand: e.target.value } as Partial<StrategyProductInput>)}
+                      placeholder="ej. Glow Labs"
+                      className="input-field w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Comisión (%)</label>
+                    <input
+                      type="text"
+                      value={sp.external_commission ?? ''}
+                      onChange={(e) => updateProduct(pi, { external_commission: e.target.value } as Partial<StrategyProductInput>)}
+                      placeholder="ej. 15"
+                      className="input-field w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Link del producto</label>
+                    <input
+                      type="url"
+                      value={sp.external_link ?? ''}
+                      onChange={(e) => updateProduct(pi, { external_link: e.target.value } as Partial<StrategyProductInput>)}
+                      placeholder="https://…"
+                      className="input-field w-full"
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Producto</label>
+                    <select
+                      value={sp.product_id}
+                      onChange={(e) => updateProduct(pi, { product_id: e.target.value })}
+                      className="input-field w-full"
+                    >
+                      <option value="">Seleccionar producto…</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.commission_rate}%)</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Campaña vinculada (opcional)</label>
+                    <select
+                      value={sp.campaign_id ?? ''}
+                      onChange={(e) => updateProduct(pi, { campaign_id: e.target.value || null })}
+                      className="input-field w-full"
+                    >
+                      <option value="">Sin campaña</option>
+                      {campaigns.filter((c) => c.status === 'active').map((c) => (
+                        <option key={c.id} value={c.id}>{c.brand_name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">

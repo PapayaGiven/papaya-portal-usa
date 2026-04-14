@@ -13,6 +13,7 @@ import ProductRequestButton from '@/components/ProductRequestButton'
 import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
 import PersonalGoalNotes from '@/components/PersonalGoalNotes'
+import AnnouncementBanner from '@/components/AnnouncementBanner'
 import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex } from '@/lib/levelAccess'
 
 function computeBanner(
@@ -168,6 +169,10 @@ export default async function DashboardPage() {
     deliverablesCount = count ?? 0
   }
 
+  // Fetch active announcements
+  const { data: announcementsData } = await admin.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(5)
+  const activeAnnouncements = (announcementsData ?? []) as { id: string; title: string; body: string | null; image_url: string | null; created_at: string }[]
+
   const totalVideosPerDay = strategyProducts.reduce((sum, p) => sum + (p.videos_per_day ?? 0), 0)
   const topStratProducts = strategyProducts
     .sort((a, b) => {
@@ -236,6 +241,13 @@ export default async function DashboardPage() {
         {banner && (
           <div className="mb-6">
             <SmartBanner banner={banner} />
+          </div>
+        )}
+
+        {/* Announcements */}
+        {activeAnnouncements.length > 0 && (
+          <div className="mb-6">
+            <AnnouncementBanner announcements={activeAnnouncements} />
           </div>
         )}
 

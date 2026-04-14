@@ -15,6 +15,7 @@ import {
   updateSettings,
   updateLevelConfig,
   addDeliverable, updateDeliverableStatus, deleteDeliverable,
+  addAnnouncement, updateAnnouncement, deleteAnnouncement, uploadAnnouncementImage,
 } from '@/app/admin/actions'
 import { SiteSettings } from '@/lib/types'
 
@@ -98,6 +99,25 @@ interface DeliverableRow {
   creator?: { name: string | null; email: string } | null
 }
 
+interface AnnouncementRow {
+  id: string
+  title: string
+  body: string | null
+  image_url: string | null
+  is_active: boolean
+  created_at: string
+}
+
+interface ViolationRow {
+  id: string
+  creator_id: string
+  description: string
+  status: string
+  screenshot_urls: string[]
+  created_at: string
+  creator?: { name: string | null; email: string } | null
+}
+
 interface LevelConfigRow {
   level_name: string
   videos_per_day: number
@@ -130,6 +150,8 @@ interface AdminPanelProps {
   settings: SiteSettings | null
   deliverables: DeliverableRow[]
   levelConfigs: LevelConfigRow[]
+  violations: ViolationRow[]
+  announcements: AnnouncementRow[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
@@ -516,6 +538,8 @@ function ProductsTab({ products }: { products: Product[] }) {
   }>>({})
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
 
@@ -531,14 +555,44 @@ function ProductsTab({ products }: { products: Product[] }) {
     }
   }
 
+  async function handleSync() {
+    setIsSyncing(true)
+    setSyncStatus(null)
+    try {
+      const res = await fetch('/api/sync-products')
+      const data = await res.json()
+      if (data.success) setSyncStatus(`Synced ${data.count} products successfully.`)
+      else setSyncStatus(`Error: ${data.error}`)
+    } catch (err) {
+      setSyncStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-dm-sans font-bold text-lg text-brand-black">Products</h2>
-        <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
-          {showAdd ? 'Cancel' : '+ Add product'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            disabled={isSyncing}
+            onClick={handleSync}
+            className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-4 py-2 rounded-xl hover:bg-brand-black/80 transition disabled:opacity-50"
+          >
+            {isSyncing ? 'Syncing...' : 'Sync now'}
+          </button>
+          <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
+            {showAdd ? 'Cancel' : '+ Add product'}
+          </button>
+        </div>
       </div>
+
+      {syncStatus && (
+        <p className={`font-dm-sans text-sm mb-4 px-3 py-2 rounded-lg ${syncStatus.startsWith('Error') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+          {syncStatus}
+        </p>
+      )}
 
       {/* Manage Tags */}
       <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4 mb-5">
@@ -1327,10 +1381,15 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
     calls_per_month_growth: settings?.calls_per_month_growth ?? 1,
     calls_per_month_scale: settings?.calls_per_month_scale ?? 2,
     calls_per_month_elite: settings?.calls_per_month_elite ?? 4,
+    booking_link_initiation: settings?.booking_link_initiation ?? '',
+    booking_link_foundation: settings?.booking_link_foundation ?? '',
     booking_link_growth: settings?.booking_link_growth ?? '',
     booking_link_scale: settings?.booking_link_scale ?? '',
     booking_link_elite: settings?.booking_link_elite ?? 'https://calendar.app.google/bW5ZsKF9wbDrLVF6A',
+    google_sheets_url: settings?.google_sheets_url ?? '',
   })
+  const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [isSyncing, setIsSyncing] = useState(false)
   const hackUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/hack`
     : '/hack'
@@ -1407,6 +1466,26 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
             <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Booking link por defecto por nivel</h3>
             <div className="space-y-3">
               <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Initiation</label>
+                <input
+                  type="url"
+                  value={bookingForm.booking_link_initiation}
+                  onChange={(e) => setBookingForm((f) => ({ ...f, booking_link_initiation: e.target.value }))}
+                  placeholder="https://calendar.app.google/..."
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
+                <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Foundation</label>
+                <input
+                  type="url"
+                  value={bookingForm.booking_link_foundation}
+                  onChange={(e) => setBookingForm((f) => ({ ...f, booking_link_foundation: e.target.value }))}
+                  placeholder="https://calendar.app.google/..."
+                  className="input-field w-full"
+                />
+              </div>
+              <div>
                 <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Growth</label>
                 <input
                   type="url"
@@ -1448,9 +1527,12 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
                 calls_per_month_growth: bookingForm.calls_per_month_growth,
                 calls_per_month_scale: bookingForm.calls_per_month_scale,
                 calls_per_month_elite: bookingForm.calls_per_month_elite,
+                booking_link_initiation: bookingForm.booking_link_initiation || null,
+                booking_link_foundation: bookingForm.booking_link_foundation || null,
                 booking_link_growth: bookingForm.booking_link_growth || null,
                 booking_link_scale: bookingForm.booking_link_scale || null,
                 booking_link_elite: bookingForm.booking_link_elite || null,
+                google_sheets_url: bookingForm.google_sheets_url || null,
               })
               if (r.error) fb(`Error: ${r.error}`)
               else fb('✓ Booking settings saved!')
@@ -1459,6 +1541,67 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
           >
             {isPending ? 'Saving...' : 'Save booking settings'}
           </button>
+        </div>
+      </div>
+
+      {/* Google Sheets Product Sync */}
+      <div>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Google Sheets Product Sync</h2>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
+          <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Google Sheets URL</label>
+            <input
+              type="url"
+              value={bookingForm.google_sheets_url}
+              onChange={(e) => setBookingForm((f) => ({ ...f, google_sheets_url: e.target.value }))}
+              placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv"
+              className="input-field w-full"
+            />
+            <p className="font-dm-sans text-xs text-gray-400 mt-1">
+              Use a published CSV URL from Google Sheets (File &gt; Share &gt; Publish to web &gt; CSV).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              disabled={isSyncing}
+              onClick={async () => {
+                setIsSyncing(true)
+                setSyncStatus(null)
+                try {
+                  // Save the URL first
+                  await updateSettings({ google_sheets_url: bookingForm.google_sheets_url || null })
+                  const res = await fetch('/api/sync-products')
+                  const data = await res.json()
+                  if (data.success) {
+                    setSyncStatus(`Synced ${data.count} products successfully.`)
+                  } else {
+                    setSyncStatus(`Error: ${data.error}`)
+                  }
+                } catch (err) {
+                  setSyncStatus(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+                } finally {
+                  setIsSyncing(false)
+                }
+              }}
+              className="font-dm-sans text-sm font-semibold bg-brand-black text-white px-6 py-2.5 rounded-xl hover:bg-brand-black/80 transition disabled:opacity-50"
+            >
+              {isSyncing ? 'Syncing...' : 'Sync Products'}
+            </button>
+
+            {settings?.last_synced_at && (
+              <span className="font-dm-sans text-xs text-gray-400">
+                Last synced: {new Date(settings.last_synced_at).toLocaleString()}
+              </span>
+            )}
+          </div>
+
+          {syncStatus && (
+            <p className={`font-dm-sans text-sm ${syncStatus.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+              {syncStatus}
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -2219,10 +2362,274 @@ function LevelConfigTab({ levelConfigs }: { levelConfigs: LevelConfigRow[] }) {
   )
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config'
+// ── Announcements Tab ────────────────────────────────────────────────────────
+function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ title: '', body: '', image_url: '' })
+  const [uploading, setUploading] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs }: AdminPanelProps) {
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    const result = await uploadAnnouncementImage(formData)
+    setUploading(false)
+    if (result.error) fb(`Error: ${result.error}`)
+    else if (result.url) setForm((f) => ({ ...f, image_url: result.url! }))
+  }
+
+  function handleAdd() {
+    if (!form.title.trim()) { fb('Error: Title is required'); return }
+    startTransition(async () => {
+      const r = await addAnnouncement({
+        title: form.title,
+        body: form.body || null,
+        image_url: form.image_url || null,
+      })
+      if (r.error) fb(`Error: ${r.error}`)
+      else { fb('Announcement created!'); setForm({ title: '', body: '', image_url: '' }); setShowAdd(false) }
+    })
+  }
+
+  function handleToggle(id: string, isActive: boolean) {
+    startTransition(async () => {
+      const r = await updateAnnouncement(id, { is_active: !isActive })
+      if (r.error) fb(`Error: ${r.error}`)
+    })
+  }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      await deleteAnnouncement(id)
+      fb('Announcement deleted')
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Announcements</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition">
+          {showAdd ? 'Cancel' : '+ New announcement'}
+        </button>
+      </div>
+
+      <Feedback msg={feedback} />
+
+      {showAdd && (
+        <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-6 space-y-4">
+          <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Title</label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Announcement title"
+              className="input-field w-full"
+            />
+          </div>
+          <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Body (optional)</label>
+            <textarea
+              rows={3}
+              value={form.body}
+              onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
+              placeholder="Announcement details..."
+              className="input-field w-full resize-none"
+            />
+          </div>
+          <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Image (optional)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageUpload}
+              disabled={uploading}
+              className="font-dm-sans text-sm text-gray-600"
+            />
+            {uploading && <p className="font-dm-sans text-xs text-gray-400 mt-1">Uploading...</p>}
+            {form.image_url && (
+              <div className="mt-2">
+                <img src={form.image_url} alt="Preview" className="w-32 h-20 object-cover rounded-lg border border-gray-200" />
+              </div>
+            )}
+          </div>
+          <button
+            disabled={isPending}
+            onClick={handleAdd}
+            className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-6 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+          >
+            {isPending ? 'Saving...' : 'Create announcement'}
+          </button>
+        </div>
+      )}
+
+      {announcements.length === 0 ? (
+        <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No announcements yet.</p>
+      ) : (
+        <div className="space-y-3">
+          {announcements.map((a) => (
+            <div key={a.id} className="bg-white border border-gray-100 rounded-2xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-dm-sans font-semibold text-sm text-brand-black">{a.title}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${a.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                      {a.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                  {a.body && <p className="font-dm-sans text-sm text-gray-600 mb-2">{a.body}</p>}
+                  {a.image_url && (
+                    <img src={a.image_url} alt="Announcement" className="w-40 h-24 object-cover rounded-lg border border-gray-200" />
+                  )}
+                  <p className="font-dm-sans text-xs text-gray-400 mt-2">
+                    {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleToggle(a.id, a.is_active)}
+                    disabled={isPending}
+                    className="font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+                  >
+                    {a.is_active ? 'Deactivate' : 'Activate'}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(a.id)}
+                    disabled={isPending}
+                    className="font-dm-sans text-xs text-red-500 hover:text-red-700 px-2 py-1.5"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Violations Tab ───────────────────────────────────────────────────────────
+function ViolationsTab({ violations }: { violations: ViolationRow[] }) {
+  const [fullScreenUrl, setFullScreenUrl] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<string | null>(null)
+
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  const statusStyles: Record<string, { label: string; color: string }> = {
+    pending: { label: 'Pending', color: 'text-amber-700 bg-amber-50 border-amber-200' },
+    in_review: { label: 'In review', color: 'text-blue-700 bg-blue-50 border-blue-200' },
+    resolved: { label: 'Resolved', color: 'text-green-700 bg-green-50 border-green-200' },
+    rejected: { label: 'Rejected', color: 'text-red-700 bg-red-50 border-red-200' },
+  }
+
+  async function updateStatus(id: string, status: string) {
+    startTransition(async () => {
+      const res = await fetch('/api/update-violation-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status }),
+      })
+      if (res.ok) fb(`Status updated to ${status}`)
+      else fb('Error updating status')
+    })
+  }
+
+  return (
+    <div>
+      <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Violations</h2>
+      <Feedback msg={feedback} />
+
+      {violations.length === 0 ? (
+        <p className="font-dm-sans text-sm text-gray-400 text-center py-8">No violations reported yet.</p>
+      ) : (
+        <div className="space-y-4">
+          {violations.map((v) => {
+            const style = statusStyles[v.status] ?? statusStyles.pending
+            return (
+              <div key={v.id} className="bg-white border border-gray-100 rounded-2xl p-5">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <span className="font-dm-sans text-sm font-semibold text-brand-black">
+                      {v.creator?.name ?? v.creator?.email ?? 'Unknown'}
+                    </span>
+                    <span className="font-dm-sans text-xs text-gray-400 ml-2">
+                      {new Date(v.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-dm-sans text-xs font-semibold px-2.5 py-1 rounded-full border ${style.color}`}>
+                      {style.label}
+                    </span>
+                    <select
+                      value={v.status}
+                      onChange={(e) => updateStatus(v.id, e.target.value)}
+                      disabled={isPending}
+                      className="font-dm-sans text-xs border border-gray-200 rounded-lg px-2 py-1"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_review">In review</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                </div>
+                <p className="font-dm-sans text-sm text-gray-700 leading-relaxed mb-3">{v.description}</p>
+
+                {/* Screenshot thumbnails */}
+                {v.screenshot_urls && v.screenshot_urls.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {v.screenshot_urls.map((url, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setFullScreenUrl(url)}
+                        className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-200 hover:border-brand-pink transition group"
+                      >
+                        <img src={url} alt={`Screenshot ${i + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Full-size screenshot modal */}
+      {fullScreenUrl && (
+        <div
+          className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4"
+          onClick={() => setFullScreenUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <button
+              onClick={() => setFullScreenUrl(null)}
+              className="absolute -top-10 right-0 text-white text-sm font-dm-sans hover:text-gray-300"
+            >
+              Close
+            </button>
+            <img src={fullScreenUrl} alt="Screenshot full size" className="max-w-full max-h-[85vh] rounded-xl object-contain" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────────
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -2237,6 +2644,8 @@ export default function AdminPanel({ creators, products, campaigns, applications
     { id: 'deliverables', label: 'Entregas', count: deliverables.length },
     { id: 'levels', label: 'Niveles', count: levels.length },
     { id: 'rewards', label: 'Recompensas', count: rewards.length },
+    { id: 'violations', label: 'Violations', count: violations.filter((v) => v.status === 'pending').length },
+    { id: 'announcements', label: 'Announcements', count: announcements.filter((a) => a.is_active).length },
     { id: 'settings', label: 'Settings' },
     { id: 'config', label: 'Configuración' },
   ]
@@ -2313,6 +2722,8 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'rewards' && <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />}
           {activeTab === 'settings' && <SettingsTab settings={settings} />}
           {activeTab === 'deliverables' && <DeliverablesTab deliverables={deliverables} creators={creators} />}
+          {activeTab === 'violations' && <ViolationsTab violations={violations} />}
+          {activeTab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
           {activeTab === 'config' && <LevelConfigTab levelConfigs={levelConfigs} />}
         </div>
       </div>

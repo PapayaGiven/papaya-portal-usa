@@ -121,7 +121,7 @@ export default async function StrategyPage() {
   }
 
   // Fetch weekly calendar completions
-  const weeklyChecklist: { date: string; completed: boolean }[] = []
+  const weeklyChecklist: { date: string; completed: boolean; videos_done?: number }[] = []
   if (creator) {
     const now2 = new Date()
     const day = now2.getDay()
@@ -135,14 +135,14 @@ export default async function StrategyPage() {
 
     const { data: calData } = await supabase
       .from('daily_checklist')
-      .select('date, video_posted')
+      .select('date, video_posted, videos_done')
       .eq('creator_id', creator.id)
       .eq('strategy_product_id', '00000000-0000-0000-0000-000000000000')
       .gte('date', monStr)
       .lte('date', sunStr)
 
     for (const row of calData ?? []) {
-      weeklyChecklist.push({ date: row.date, completed: row.video_posted })
+      weeklyChecklist.push({ date: row.date, completed: row.video_posted, videos_done: (row as Record<string, unknown>).videos_done as number | undefined })
     }
   }
 

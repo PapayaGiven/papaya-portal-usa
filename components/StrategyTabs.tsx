@@ -10,7 +10,7 @@ interface StrategyTabsProps {
   level: CreatorLevel
   productsContent: React.ReactNode
   creatorId: string
-  weeklyChecklist: { date: string; completed: boolean }[]
+  weeklyChecklist: { date: string; completed: boolean; videos_done?: number }[]
   levelConfigVideosPerDay: number
   creativeProducts: {
     id: string

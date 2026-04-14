@@ -32,22 +32,25 @@ export async function toggleChecklistItem(
 export async function toggleCalendarDay(
   creatorId: string,
   date: string,
-  completed: boolean
+  completed: boolean,
+  videosDone?: number
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
 
+  const upsertData: Record<string, unknown> = {
+    creator_id: creatorId,
+    strategy_product_id: '00000000-0000-0000-0000-000000000000',
+    date,
+    video_posted: completed,
+    live_done: false,
+  }
+  if (videosDone !== undefined) {
+    upsertData.videos_done = videosDone
+  }
+
   const { error } = await supabase
     .from('daily_checklist')
-    .upsert(
-      {
-        creator_id: creatorId,
-        strategy_product_id: '00000000-0000-0000-0000-000000000000',
-        date,
-        video_posted: completed,
-        live_done: false,
-      },
-      { onConflict: 'creator_id,strategy_product_id,date' }
-    )
+    .upsert(upsertData, { onConflict: 'creator_id,strategy_product_id,date' })
 
   if (error) return { error: error.message }
   revalidatePath('/strategy')

@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cleanup-violations",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/sync-products",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}

@@ -554,9 +554,13 @@ export async function updateSettings(data: {
   calls_per_month_growth?: number
   calls_per_month_scale?: number
   calls_per_month_elite?: number
+  booking_link_initiation?: string | null
+  booking_link_foundation?: string | null
   booking_link_growth?: string | null
   booking_link_scale?: string | null
   booking_link_elite?: string | null
+  google_sheets_url?: string | null
+  last_synced_at?: string | null
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
@@ -637,6 +641,63 @@ export async function deleteDeliverable(id: string): Promise<void> {
   await supabase.from('deliverables').delete().eq('id', id)
   revalidatePath('/admin')
   revalidatePath('/deliverables')
+}
+
+// ── Announcements ───────────────────────────────────────────────────────────
+
+export async function addAnnouncement(data: {
+  title: string
+  body: string | null
+  image_url: string | null
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('announcements').insert(data)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
+export async function updateAnnouncement(id: string, data: {
+  title?: string
+  body?: string | null
+  image_url?: string | null
+  is_active?: boolean
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('announcements').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
+export async function deleteAnnouncement(id: string): Promise<void> {
+  const supabase = createAdminClient()
+  await supabase.from('announcements').delete().eq('id', id)
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+}
+
+export async function uploadAnnouncementImage(formData: FormData): Promise<{ url?: string; error?: string }> {
+  const file = formData.get('file') as File
+  if (!file) return { error: 'No file provided' }
+
+  const supabase = createAdminClient()
+  const ext = file.name.split('.').pop()
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+
+  const { error } = await supabase.storage
+    .from('announcement-images')
+    .upload(path, file, { contentType: file.type })
+
+  if (error) return { error: error.message }
+
+  const { data: urlData } = supabase.storage
+    .from('announcement-images')
+    .getPublicUrl(path)
+
+  return { url: urlData.publicUrl }
 }
 
 // ── Strategy Products Creative Bank ──────────────────────────────────────────

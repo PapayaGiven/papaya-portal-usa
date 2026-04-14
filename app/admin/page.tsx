@@ -15,7 +15,7 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient()
 
-  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes] = await Promise.all([
+  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes, violationsRes, announcementsRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -65,6 +65,14 @@ export default async function AdminPage() {
       .from('level_config')
       .select('*')
       .order('level_name'),
+    supabase
+      .from('violations')
+      .select('*, creator:creators(name, email)')
+      .order('created_at', { ascending: false }),
+    supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false }),
   ])
 
   return (
@@ -85,6 +93,10 @@ export default async function AdminPage() {
       deliverables={(deliverablesRes.data ?? []) as any}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       levelConfigs={(levelConfigRes.data ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      violations={(violationsRes.data ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      announcements={(announcementsRes.data ?? []) as any}
     />
   )
 }
