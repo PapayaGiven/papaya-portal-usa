@@ -32,6 +32,8 @@ export interface Product {
   niche: string | null
   image_url: string | null
   product_link: string | null
+  showcase_link: string | null
+  sample_link: string | null
   tags: string[]
   created_at: string
   approved_for_initiation: boolean

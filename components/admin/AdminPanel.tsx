@@ -506,12 +506,12 @@ function ProductsTab({ products }: { products: Product[] }) {
   const [newTag, setNewTag] = useState('')
   const [form, setForm] = useState({
     name: '', commission_rate: '', conversion_rate: '', niche: '',
-    is_exclusive: false, image_url: '', product_link: '', tags: [] as string[],
+    is_exclusive: false, image_url: '', product_link: '', showcase_link: '', sample_link: '', tags: [] as string[],
     product_type: 'hero' as ProductType,
   })
   const [editForm, setEditForm] = useState<Partial<{
     name: string; commission_rate: number; conversion_rate: number
-    niche: string; is_exclusive: boolean; image_url: string | null; product_link: string | null; tags: string[]
+    niche: string; is_exclusive: boolean; image_url: string | null; product_link: string | null; showcase_link: string | null; sample_link: string | null; tags: string[]
     product_type: ProductType
   }>>({})
   const [feedback, setFeedback] = useState<string | null>(null)
@@ -581,10 +581,11 @@ function ProductsTab({ products }: { products: Product[] }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="input-field col-span-2 sm:col-span-1" />
             <input placeholder="Commission %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
-            <input placeholder="Conversion %" type="number" value={form.conversion_rate} onChange={(e) => setForm((f) => ({ ...f, conversion_rate: e.target.value }))} className="input-field" />
             <input placeholder="Niche (e.g. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
             <input placeholder="Image URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
             <input placeholder="Product link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
+            <input placeholder="Showcase link (https://...)" value={form.showcase_link} onChange={(e) => setForm((f) => ({ ...f, showcase_link: e.target.value }))} className="input-field" />
+            <input placeholder="Sample request link (https://...)" value={form.sample_link} onChange={(e) => setForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field" />
             <div>
               <select value={form.product_type} onChange={(e) => setForm((f) => ({ ...f, product_type: e.target.value as ProductType }))} className="input-field w-full">
                 <option value="hero">Hero</option>
@@ -630,13 +631,15 @@ function ProductsTab({ products }: { products: Product[] }) {
                 niche: form.niche,
                 image_url: form.image_url || null,
                 product_link: form.product_link || null,
+                showcase_link: form.showcase_link || null,
+                sample_link: form.sample_link || null,
                 tags: form.tags,
                 product_type: form.product_type,
               })
               if (r.error) fb(`Error: ${r.error}`)
               else {
                 fb('✓ Product added')
-                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', tags: [], product_type: 'hero' })
+                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', showcase_link: '', sample_link: '', tags: [], product_type: 'hero' })
                 setShowAdd(false)
               }
             })}
@@ -727,6 +730,8 @@ function ProductsTab({ products }: { products: Product[] }) {
                           is_exclusive: p.is_exclusive,
                           image_url: p.image_url ?? '',
                           product_link: p.product_link ?? '',
+                          showcase_link: p.showcase_link ?? '',
+                          sample_link: p.sample_link ?? '',
                           tags: p.tags ?? [],
                           product_type: (p.product_type ?? 'hero') as ProductType,
                         })
@@ -764,10 +769,6 @@ function ProductsTab({ products }: { products: Product[] }) {
                         <input type="number" value={editForm.commission_rate ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, commission_rate: parseFloat(e.target.value) || 0 }))} className="input-field w-full" />
                       </div>
                       <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Conversion %</p>
-                        <input type="number" value={editForm.conversion_rate ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, conversion_rate: parseFloat(e.target.value) || 0 }))} className="input-field w-full" />
-                      </div>
-                      <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Niche</p>
                         <input value={editForm.niche ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, niche: e.target.value }))} className="input-field w-full" />
                       </div>
@@ -786,6 +787,14 @@ function ProductsTab({ products }: { products: Product[] }) {
                             <a href={editForm.product_link as string} target="_blank" rel="noopener noreferrer" className="text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 px-2 py-1 rounded-lg whitespace-nowrap self-center transition">Test link</a>
                           )}
                         </div>
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Showcase Link</p>
+                        <input value={editForm.showcase_link ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, showcase_link: e.target.value }))} className="input-field w-full" placeholder="https://..." />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Sample Request Link</p>
+                        <input value={editForm.sample_link ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field w-full" placeholder="https://..." />
                       </div>
                     </div>
                     <div className="mt-3">
@@ -806,7 +815,7 @@ function ProductsTab({ products }: { products: Product[] }) {
                     <button
                       disabled={isPending}
                       onClick={() => startTransition(async () => {
-                        const payload = { ...editForm, image_url: (editForm.image_url as string) || null, product_link: (editForm.product_link as string) || null }
+                        const payload = { ...editForm, image_url: (editForm.image_url as string) || null, product_link: (editForm.product_link as string) || null, showcase_link: (editForm.showcase_link as string) || null, sample_link: (editForm.sample_link as string) || null }
                         await updateProduct(p.id, payload)
                         fb('✓ Updated'); setEditingId(null); setEditForm({})
                       })}

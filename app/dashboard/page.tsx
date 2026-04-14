@@ -603,7 +603,7 @@ export default async function DashboardPage() {
             })()}
 
             {/* Campaigns (Foundation+ only) */}
-            {canSeeCampaigns(level) && campaigns.length > 0 && (
+            {canSeeCampaigns(level) && (
               <section className="mb-8">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="font-playfair text-2xl text-brand-black">Campañas activas</h2>
@@ -611,11 +611,17 @@ export default async function DashboardPage() {
                     Ver todas →
                   </Link>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {campaigns.slice(0, 3).map((campaign) => (
-                    <CampaignCard key={campaign.id} campaign={campaign} />
-                  ))}
-                </div>
+                {campaigns.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {campaigns.slice(0, 2).map((campaign) => (
+                      <CampaignCard key={campaign.id} campaign={campaign} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+                    <p className="font-dm-sans text-sm text-gray-400">No hay campañas activas en este momento.</p>
+                  </div>
+                )}
               </section>
             )}
 

@@ -123,12 +123,14 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition hover:opacity-90"
               style={{ backgroundColor: '#1B5E3B' }}
             >
-              Agregar al showcase →
+              Add to Showcase →
             </a>
           )}
-          {campaign.sample_available && (
+          {campaign.product_link && campaign.sample_available && (
             <a
-              href={`mailto:team@papayasocialclub.com?subject=Sample request: ${encodeURIComponent(campaign.brand_name)}`}
+              href={campaign.product_link}
+              target="_blank"
+              rel="noopener noreferrer"
               className="flex-1 text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-brand-green border-2 border-brand-green hover:bg-brand-green/5 transition"
             >
               Solicitar muestra

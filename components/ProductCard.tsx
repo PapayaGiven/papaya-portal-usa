@@ -49,6 +49,19 @@ export default function ProductCard({ product }: ProductCardProps) {
         </p>
         <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Comisión</p>
       </div>
+
+      <div className="flex gap-2 mt-3">
+        {product.showcase_link && (
+          <a href={product.showcase_link} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-2 rounded-xl font-dm-sans text-xs font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition">
+            Agregar a showcase →
+          </a>
+        )}
+        {product.sample_link && (
+          <a href={product.sample_link} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-2 rounded-xl font-dm-sans text-xs font-semibold text-brand-green bg-brand-green/10 hover:bg-brand-green/20 transition">
+            Solicitar muestra →
+          </a>
+        )}
+      </div>
     </div>
   )
 }

@@ -144,6 +144,8 @@ export async function addProduct(data: {
   niche: string
   image_url: string | null
   product_link: string | null
+  showcase_link?: string | null
+  sample_link?: string | null
   tags: string[]
   product_type?: string
 }): Promise<{ error?: string }> {
@@ -164,6 +166,8 @@ export async function updateProduct(
     niche: string
     image_url: string | null
     product_link: string | null
+    showcase_link: string | null
+    sample_link: string | null
     tags: string[]
     product_type: string
   }>
