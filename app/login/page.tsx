@@ -2,21 +2,26 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 
+type Mode = 'choice' | 'login'
+
 export default function LoginPage() {
+  const [mode, setMode] = useState<Mode>('choice')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  // Detect invite tokens in hash and redirect to /auth/confirm
   useEffect(() => {
     const hash = window.location.hash
     if (hash && hash.includes('type=invite')) {
-      console.log('[login] Invite token detected in hash, redirecting to /auth/confirm')
+      router.replace('/auth/confirm' + hash)
+    }
+    if (hash && hash.includes('type=recovery')) {
       router.replace('/auth/confirm' + hash)
     }
   }, [router])
@@ -53,56 +58,91 @@ export default function LoginPage() {
               />
             </div>
             <p className="font-dm-sans text-xs font-semibold text-white px-3 py-1 rounded-full inline-block mb-3" style={{ backgroundColor: '#F4A7C3' }}>Papaya Social Club — USA 🇺🇸</p>
-            <h1 className="font-playfair text-4xl text-brand-green leading-tight">Bienvenida de nuevo.</h1>
-            <p className="font-dm-sans text-gray-500 mt-2 text-sm">Tu dashboard te espera.</p>
+            <h1 className="font-playfair text-4xl text-brand-green leading-tight">
+              {mode === 'login' ? 'Bienvenida de nuevo.' : 'Hola 🌸'}
+            </h1>
+            <p className="font-dm-sans text-gray-500 mt-2 text-sm">
+              {mode === 'login' ? 'Tu dashboard te espera.' : '¿Cómo quieres continuar?'}
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Email</label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="tu@ejemplo.com"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
-              />
+          {mode === 'choice' && (
+            <div className="space-y-3">
+              <Link
+                href="/onboarding"
+                className="block w-full text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                style={{ backgroundColor: '#1B5E3B' }}
+              >
+                Primera vez aquí →
+              </Link>
+              <button
+                onClick={() => setMode('login')}
+                className="block w-full text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-brand-green border-2 border-brand-green hover:bg-brand-green/5 transition"
+              >
+                Iniciar sesión
+              </button>
+              <Link
+                href="/forgot-password"
+                className="block w-full text-center py-3 font-dm-sans text-sm text-gray-500 hover:text-brand-green transition"
+              >
+                Olvidé mi contraseña
+              </Link>
             </div>
+          )}
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Contraseña</label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••��•••"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
-              />
-            </div>
+          {mode === 'login' && (
+            <>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="email" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Email</label>
+                  <input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="tu@ejemplo.com"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
+                  />
+                </div>
 
-            {error && (
-              <div className="bg-brand-pink/10 border border-brand-pink/30 rounded-xl px-4 py-3">
-                <p className="text-sm font-dm-sans text-rose-600">{error}</p>
-              </div>
-            )}
+                <div>
+                  <label htmlFor="password" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Contraseña</label>
+                  <input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    placeholder="••••••••"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-brand-pink/40 focus:border-brand-pink font-dm-sans text-sm bg-gray-50 text-gray-900 placeholder-gray-400 transition"
+                  />
+                </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] mt-2"
-              style={{ backgroundColor: '#1B5E3B' }}
-            >
-              {loading ? 'Iniciando sesión...' : 'Iniciar sesión →'}
-            </button>
-          </form>
+                {error && (
+                  <div className="bg-brand-pink/10 border border-brand-pink/30 rounded-xl px-4 py-3">
+                    <p className="text-sm font-dm-sans text-rose-600">{error}</p>
+                  </div>
+                )}
 
-          <p className="text-center text-xs text-gray-400 font-dm-sans mt-6">
-            ¿No tienes cuenta? Tu agencia te enviará una invitación.
-          </p>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] mt-2"
+                  style={{ backgroundColor: '#1B5E3B' }}
+                >
+                  {loading ? 'Iniciando sesión...' : 'Iniciar sesión →'}
+                </button>
+              </form>
+
+              <button
+                onClick={() => { setMode('choice'); setError(null) }}
+                className="block w-full text-center mt-4 py-2 font-dm-sans text-xs text-gray-400 hover:text-brand-green transition"
+              >
+                ← Volver
+              </button>
+            </>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-400 font-dm-sans mt-6">

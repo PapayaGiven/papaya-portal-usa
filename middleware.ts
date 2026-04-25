@@ -30,6 +30,8 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const isPublic =
     pathname === '/login' ||
+    pathname === '/onboarding' ||
+    pathname === '/forgot-password' ||
     pathname === '/auth/confirm' ||
     pathname === '/hack' ||
     pathname.startsWith('/admin')
@@ -38,7 +40,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  if (pathname === '/login' && user) {
+  if ((pathname === '/login' || pathname === '/onboarding') && user) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

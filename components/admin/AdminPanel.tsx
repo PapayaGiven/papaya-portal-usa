@@ -3,11 +3,12 @@
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Product, Campaign, CreatorLevel, ProductType, PRODUCT_TYPE_LABELS, PRODUCT_TYPE_COLORS } from '@/lib/types'
+import { Creator, Product, Campaign, CreatorLevel, ProductType } from '@/lib/types'
+import { createClient } from '@/lib/supabase/client'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, resendInvite,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, resendInvite, regenerateAccessCode,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
@@ -17,6 +18,16 @@ import {
   addDeliverable, updateDeliverableStatus, deleteDeliverable,
   addAnnouncement, updateAnnouncement, deleteAnnouncement, uploadAnnouncementImage,
 } from '@/app/admin/actions'
+
+async function uploadToStorage(bucket: string, file: File): Promise<string> {
+  const supabase = createClient()
+  const ext = file.name.split('.').pop()
+  const fileName = `${Date.now()}.${ext}`
+  const { error } = await supabase.storage.from(bucket).upload(fileName, file)
+  if (error) throw error
+  const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(fileName)
+  return publicUrl
+}
 import { SiteSettings } from '@/lib/types'
 
 interface ApplicationRow {
@@ -195,8 +206,13 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
   const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string; booking_link: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '', booking_link: '' })
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
+  const [generatedCode, setGeneratedCode] = useState<{ name: string; code: string } | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  function copyToClipboard(text: string, label: string) {
+    navigator.clipboard.writeText(text).then(() => fb(`✓ ${label} copiado`))
+  }
 
   function openElite(c: Creator) {
     setExpandedElite(c.id)
@@ -222,13 +238,38 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
           onClick={() => setShowAdd(!showAdd)}
           className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition"
         >
-          {showAdd ? 'Cancel' : '+ Invite creator'}
+          {showAdd ? 'Cancel' : '+ Add creator'}
         </button>
       </div>
 
+      {generatedCode && (
+        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 mb-5">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <h3 className="font-dm-sans font-bold text-base text-emerald-800">✓ Creator creada — comparte este código</h3>
+              <p className="font-dm-sans text-xs text-emerald-700/70 mt-0.5">
+                {generatedCode.name} puede usar este código en /onboarding para configurar su cuenta.
+              </p>
+            </div>
+            <button onClick={() => setGeneratedCode(null)} className="text-emerald-600/60 hover:text-emerald-800 text-lg leading-none shrink-0">×</button>
+          </div>
+          <div className="flex items-center gap-3">
+            <code className="font-dm-sans font-bold text-2xl tracking-widest text-emerald-900 bg-white border border-emerald-300 rounded-xl px-5 py-3">
+              {generatedCode.code}
+            </code>
+            <button
+              onClick={() => copyToClipboard(generatedCode.code, 'Código')}
+              className="font-dm-sans text-sm font-semibold bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition"
+            >
+              Copiar código
+            </button>
+          </div>
+        </div>
+      )}
+
       {showAdd && (
         <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
-          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Invite new creator</h3>
+          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Add new creator</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input
               type="text"
@@ -250,11 +291,15 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
             onClick={() => startTransition(async () => {
               const r = await addCreator(addForm.name, addForm.email)
               if (r.error) fb(`Error: ${r.error}`)
-              else { fb('✓ Creator invited!'); setAddForm({ name: '', email: '' }); setShowAdd(false) }
+              else {
+                fb('✓ Creator created!')
+                if (r.access_code) setGeneratedCode({ name: addForm.name || addForm.email, code: r.access_code })
+                setAddForm({ name: '', email: '' }); setShowAdd(false)
+              }
             })}
             className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
           >
-            {isPending ? 'Sending...' : 'Send invitation'}
+            {isPending ? 'Saving...' : 'Crear creator y generar código'}
           </button>
         </div>
       )}
@@ -265,20 +310,54 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Name', 'Email', 'Level', 'GMV', 'Personal Goal', 'Videos/día', 'Status', 'Actions', 'Elite'].map((h) => (
+              {['Name', 'Email', 'Access Code', 'Onboarding', 'Level', 'GMV', 'Personal Goal', 'Videos/día', 'Status', 'Actions', 'Elite'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {creators.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
+              <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
             )}
             {creators.map((c) => (
               <>
               <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">{c.name || '–'}</td>
                 <td className="px-4 py-3 text-gray-500">{c.email}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {c.access_code ? (
+                    <div className="flex items-center gap-1.5">
+                      <code className="font-mono text-xs font-semibold text-brand-black bg-gray-100 px-2 py-1 rounded-lg">{c.access_code}</code>
+                      <button
+                        onClick={() => copyToClipboard(c.access_code!, 'Código')}
+                        className="text-xs text-gray-500 hover:text-brand-green px-1.5 py-1 rounded hover:bg-gray-100 transition"
+                        title="Copiar"
+                      >📋</button>
+                      <button
+                        disabled={isPending}
+                        onClick={() => {
+                          if (confirm(`¿Regenerar código de acceso para ${c.name || c.email}? El código anterior dejará de funcionar.`)) {
+                            startTransition(async () => {
+                              const r = await regenerateAccessCode(c.id)
+                              if (r.error) fb(`Error: ${r.error}`)
+                              else fb(`✓ Nuevo código: ${r.access_code}`)
+                            })
+                          }
+                        }}
+                        className="text-xs text-amber-600 hover:text-amber-800 px-1.5 py-1 rounded hover:bg-amber-50 transition"
+                        title="Regenerar"
+                      >↻</button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-gray-300">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-500' : 'bg-amber-500'}`} />
+                    {c.has_completed_onboarding ? 'Completado' : 'Pendiente'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <select
                     value={c.level}
@@ -443,7 +522,7 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
               </tr>
               {expandedElite === c.id && (
                 <tr key={`${c.id}-elite`} className="bg-amber-50/50">
-                  <td colSpan={9} className="px-6 py-4">
+                  <td colSpan={11} className="px-6 py-4">
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
@@ -540,8 +619,21 @@ function ProductsTab({ products }: { products: Product[] }) {
   const [isPending, startTransition] = useTransition()
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  async function handleImageUpload(file: File, target: 'add' | 'edit') {
+    setUploading(true)
+    try {
+      const url = await uploadToStorage('product-images', file)
+      if (target === 'add') setForm((f) => ({ ...f, image_url: url }))
+      else setEditForm((f) => ({ ...f, image_url: url }))
+    } catch (err) {
+      fb(`Error: ${err instanceof Error ? err.message : 'Upload failed'}`)
+    }
+    setUploading(false)
+  }
 
   function toggleTag(tag: string, current: string[], setter: (tags: string[]) => void) {
     setter(current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag])
@@ -636,18 +728,13 @@ function ProductsTab({ products }: { products: Product[] }) {
             <input placeholder="Name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className="input-field col-span-2 sm:col-span-1" />
             <input placeholder="Commission %" type="number" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field" />
             <input placeholder="Niche (e.g. Beauty)" value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field" />
-            <input placeholder="Image URL" value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field" />
+            <div>
+              <label className="font-dm-sans text-xs font-semibold text-gray-500 mb-1 block">Product Image</label>
+              <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(e.target.files[0], 'add') }} className="input-field w-full text-xs" />
+            </div>
             <input placeholder="Product link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <input placeholder="Showcase link (https://...)" value={form.showcase_link} onChange={(e) => setForm((f) => ({ ...f, showcase_link: e.target.value }))} className="input-field" />
             <input placeholder="Sample request link (https://...)" value={form.sample_link} onChange={(e) => setForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field" />
-            <div>
-              <select value={form.product_type} onChange={(e) => setForm((f) => ({ ...f, product_type: e.target.value as ProductType }))} className="input-field w-full">
-                <option value="hero">Hero</option>
-                <option value="sub_hero">Sub-hero</option>
-                <option value="complementary">Complementary</option>
-                <option value="winner">Winner</option>
-              </select>
-            </div>
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
               <input type="checkbox" checked={form.is_exclusive} onChange={(e) => setForm((f) => ({ ...f, is_exclusive: e.target.checked }))} className="rounded" />
               Exclusive
@@ -675,7 +762,7 @@ function ProductsTab({ products }: { products: Product[] }) {
             </div>
           </div>
           <button
-            disabled={isPending || !form.name}
+            disabled={isPending || !form.name || uploading}
             onClick={() => startTransition(async () => {
               const r = await addProduct({
                 name: form.name,
@@ -688,7 +775,6 @@ function ProductsTab({ products }: { products: Product[] }) {
                 showcase_link: form.showcase_link || null,
                 sample_link: form.sample_link || null,
                 tags: form.tags,
-                product_type: form.product_type,
               })
               if (r.error) fb(`Error: ${r.error}`)
               else {
@@ -710,14 +796,14 @@ function ProductsTab({ products }: { products: Product[] }) {
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              {['Image', 'Name', 'Tipo', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Initiation', 'Actions'].map((h) => (
+              {['Image', 'Name', 'Commission', 'Niche', 'Tags', 'Exclusive', 'Initiation', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {products.length === 0 && (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
             )}
             {products.map((p) => (
               <>
@@ -735,11 +821,6 @@ function ProductsTab({ products }: { products: Product[] }) {
                       <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-xs text-brand-green hover:underline">Link →</a>
                     )}
                   </div>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${PRODUCT_TYPE_COLORS[(p.product_type ?? 'hero') as ProductType]}`}>
-                    {PRODUCT_TYPE_LABELS[(p.product_type ?? 'hero') as ProductType]}
-                  </span>
                 </td>
                 <td className="px-4 py-3 font-bold text-brand-pink">{p.commission_rate}%</td>
                 <td className="px-4 py-3">
@@ -803,20 +884,11 @@ function ProductsTab({ products }: { products: Product[] }) {
               </tr>
               {editingId === p.id && (
                 <tr key={`${p.id}-edit`} className="bg-brand-light-pink/50">
-                  <td colSpan={9} className="px-6 py-4">
+                  <td colSpan={8} className="px-6 py-4">
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Name</p>
                         <input value={editForm.name ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} className="input-field w-full" />
-                      </div>
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Tipo de producto</p>
-                        <select value={editForm.product_type ?? 'hero'} onChange={(e) => setEditForm((f) => ({ ...f, product_type: e.target.value as ProductType }))} className="input-field w-full">
-                          <option value="hero">Hero</option>
-                          <option value="sub_hero">Sub-hero</option>
-                          <option value="complementary">Complementary</option>
-                          <option value="winner">Winner</option>
-                        </select>
                       </div>
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Commission %</p>
@@ -827,8 +899,8 @@ function ProductsTab({ products }: { products: Product[] }) {
                         <input value={editForm.niche ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, niche: e.target.value }))} className="input-field w-full" />
                       </div>
                       <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Image URL</p>
-                        <input value={editForm.image_url ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, image_url: e.target.value }))} className="input-field w-full" />
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Product Image</p>
+                        <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { if (e.target.files?.[0]) handleImageUpload(e.target.files[0], 'edit') }} className="input-field w-full text-xs" />
                         {editForm.image_url && (
                           <img src={editForm.image_url as string} alt="Preview" className="w-12 h-12 object-cover rounded-lg border border-gray-200 mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                         )}
@@ -867,7 +939,7 @@ function ProductsTab({ products }: { products: Product[] }) {
                       </div>
                     </div>
                     <button
-                      disabled={isPending}
+                      disabled={isPending || uploading}
                       onClick={() => startTransition(async () => {
                         const payload = { ...editForm, image_url: (editForm.image_url as string) || null, product_link: (editForm.product_link as string) || null, showcase_link: (editForm.showcase_link as string) || null, sample_link: (editForm.sample_link as string) || null }
                         await updateProduct(p.id, payload)
@@ -897,12 +969,31 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
   const emptyForm = {
     brand_name: '', description: '', commission_rate: '', spots_left: '',
     deadline: '', min_level: 'Initiation' as CreatorLevel, target_levels: [] as string[], status: 'active',
-    brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false,
+    brand_logo_url: '', product_id: '', product_ids: [] as string[], budget: '', product_link: '', sample_available: false,
   }
   const [form, setForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyForm)
+  const [productSearch, setProductSearch] = useState('')
+  const [editProductSearch, setEditProductSearch] = useState('')
+  const [uploading, setUploading] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  function toggleCampaignProduct(productId: string, current: string[], setter: (ids: string[]) => void) {
+    setter(current.includes(productId) ? current.filter((p) => p !== productId) : [...current, productId])
+  }
+
+  async function handleLogoUpload(file: File, target: 'add' | 'edit') {
+    setUploading(true)
+    try {
+      const url = await uploadToStorage('campaign-assets', file)
+      if (target === 'add') setForm((f) => ({ ...f, brand_logo_url: url }))
+      else setEditForm((f) => ({ ...f, brand_logo_url: url }))
+    } catch (err) {
+      fb(`Error: ${err instanceof Error ? err.message : 'Upload failed'}`)
+    }
+    setUploading(false)
+  }
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
 
@@ -943,11 +1034,10 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                 </label>
               ))}
             </div>
-            <input placeholder="Brand logo URL" value={form.brand_logo_url} onChange={(e) => setForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field" />
-            <select value={form.product_id} onChange={(e) => setForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field">
-              <option value="">Link product (optional)</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <div>
+              <label className="font-dm-sans text-xs font-semibold text-gray-500 mb-1 block">Brand Logo</label>
+              <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0], 'add') }} className="input-field w-full text-xs" />
+            </div>
             <input placeholder="Budget ($)" type="number" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} className="input-field" />
             <input placeholder="Product link (showcase)" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700 sm:col-span-2">
@@ -961,8 +1051,58 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
               <img src={form.brand_logo_url} alt="Logo" className="h-10 object-contain rounded border border-gray-200 bg-white px-2 py-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
             </div>
           )}
+
+          {/* Linked products multi-select */}
+          <div className="mt-4">
+            <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-2">Productos vinculados</p>
+            {form.product_ids.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-2">
+                {form.product_ids.map((pid) => {
+                  const p = products.find((x) => x.id === pid)
+                  return (
+                    <span key={pid} className="inline-flex items-center gap-1.5 text-xs font-medium bg-brand-green/10 text-brand-green px-2.5 py-1 rounded-full">
+                      {p?.name || pid}
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, product_ids: f.product_ids.filter((id) => id !== pid) }))}
+                        className="hover:text-red-600 leading-none"
+                      >×</button>
+                    </span>
+                  )
+                })}
+              </div>
+            )}
+            <input
+              type="text"
+              placeholder="Buscar productos para agregar..."
+              value={productSearch}
+              onChange={(e) => setProductSearch(e.target.value)}
+              className="input-field w-full"
+            />
+            {productSearch && (
+              <div className="mt-1 max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-xl divide-y divide-gray-50">
+                {products
+                  .filter((p) => !form.product_ids.includes(p.id) && p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                  .slice(0, 10)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        toggleCampaignProduct(p.id, form.product_ids, (ids) => setForm((f) => ({ ...f, product_ids: ids })))
+                        setProductSearch('')
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm font-dm-sans hover:bg-brand-light-pink transition"
+                    >
+                      {p.name} <span className="text-xs text-gray-400">{p.commission_rate}%</span>
+                    </button>
+                  ))}
+              </div>
+            )}
+          </div>
+
           <button
-            disabled={isPending || !form.brand_name}
+            disabled={isPending || !form.brand_name || uploading}
             onClick={() => startTransition(async () => {
               const r = await addCampaign({
                 brand_name: form.brand_name,
@@ -974,7 +1114,8 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                 target_levels: form.target_levels,
                 status: 'active',
                 brand_logo_url: form.brand_logo_url || null,
-                product_id: form.product_id || null,
+                product_id: form.product_ids[0] || null,
+                product_ids: form.product_ids,
                 budget: parseFloat(form.budget) || null,
                 product_link: form.product_link || null,
                 sample_available: form.sample_available,
@@ -982,7 +1123,8 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
               if (r.error) fb(`Error: ${r.error}`)
               else {
                 fb('✓ Campaign created')
-                setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', target_levels: [], status: 'active', brand_logo_url: '', product_id: '', budget: '', product_link: '', sample_available: false })
+                setForm({ brand_name: '', description: '', commission_rate: '', spots_left: '', deadline: '', min_level: 'Initiation', target_levels: [], status: 'active', brand_logo_url: '', product_id: '', product_ids: [], budget: '', product_link: '', sample_available: false })
+                setProductSearch('')
                 setShowAdd(false)
               }
             })}
@@ -1083,6 +1225,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                             status: c.status,
                             brand_logo_url: c.brand_logo_url ?? '',
                             product_id: c.product_id ?? '',
+                            product_ids: (c.campaign_products ?? []).map((cp) => cp.product_id),
                             budget: c.budget ? String(c.budget) : '',
                             product_link: c.product_link ?? '',
                             sample_available: c.sample_available,
@@ -1168,18 +1311,58 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                         </select>
                       </div>
                       <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Brand Logo URL</p>
-                        <input value={editForm.brand_logo_url} onChange={(e) => setEditForm((f) => ({ ...f, brand_logo_url: e.target.value }))} className="input-field w-full" />
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Brand Logo</p>
+                        <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { if (e.target.files?.[0]) handleLogoUpload(e.target.files[0], 'edit') }} className="input-field w-full text-xs" />
                         {editForm.brand_logo_url && (
                           <img src={editForm.brand_logo_url} alt="Logo" className="h-8 object-contain rounded border border-gray-200 bg-white px-2 py-0.5 mt-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
                         )}
                       </div>
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Linked product</p>
-                        <select value={editForm.product_id} onChange={(e) => setEditForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field w-full">
-                          <option value="">None</option>
-                          {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                      <div className="sm:col-span-2 lg:col-span-3">
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Productos vinculados</p>
+                        {editForm.product_ids.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mb-2">
+                            {editForm.product_ids.map((pid) => {
+                              const p = products.find((x) => x.id === pid)
+                              return (
+                                <span key={pid} className="inline-flex items-center gap-1.5 text-xs font-medium bg-brand-green/10 text-brand-green px-2.5 py-1 rounded-full">
+                                  {p?.name || pid}
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditForm((f) => ({ ...f, product_ids: f.product_ids.filter((id) => id !== pid) }))}
+                                    className="hover:text-red-600 leading-none"
+                                  >×</button>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                        <input
+                          type="text"
+                          placeholder="Buscar productos para agregar..."
+                          value={editProductSearch}
+                          onChange={(e) => setEditProductSearch(e.target.value)}
+                          className="input-field w-full"
+                        />
+                        {editProductSearch && (
+                          <div className="mt-1 max-h-40 overflow-y-auto bg-white border border-gray-200 rounded-xl divide-y divide-gray-50">
+                            {products
+                              .filter((p) => !editForm.product_ids.includes(p.id) && p.name.toLowerCase().includes(editProductSearch.toLowerCase()))
+                              .slice(0, 10)
+                              .map((p) => (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => {
+                                    toggleCampaignProduct(p.id, editForm.product_ids, (ids) => setEditForm((f) => ({ ...f, product_ids: ids })))
+                                    setEditProductSearch('')
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-sm font-dm-sans hover:bg-brand-light-pink transition"
+                                >
+                                  {p.name} <span className="text-xs text-gray-400">{p.commission_rate}%</span>
+                                </button>
+                              ))}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Budget ($)</p>
@@ -1202,7 +1385,7 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                       </div>
                     </div>
                     <button
-                      disabled={isPending || !editForm.brand_name}
+                      disabled={isPending || !editForm.brand_name || uploading}
                       onClick={() => startTransition(async () => {
                         const r = await updateCampaign(c.id, {
                           brand_name: editForm.brand_name,
@@ -1214,7 +1397,8 @@ function CampaignsTab({ campaigns, products }: { campaigns: Campaign[]; products
                           target_levels: editForm.target_levels,
                           status: editForm.status,
                           brand_logo_url: editForm.brand_logo_url || null,
-                          product_id: editForm.product_id || null,
+                          product_id: editForm.product_ids[0] || null,
+                          product_ids: editForm.product_ids,
                           budget: parseFloat(editForm.budget) || null,
                           product_link: editForm.product_link || null,
                           sample_available: editForm.sample_available,

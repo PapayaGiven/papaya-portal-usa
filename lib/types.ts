@@ -21,6 +21,8 @@ export interface Creator {
   personal_goal_notes: string | null
   booking_link: string | null
   custom_videos_per_day: number | null
+  access_code: string | null
+  has_completed_onboarding: boolean
 }
 
 export interface Product {
@@ -68,6 +70,7 @@ export interface Campaign {
   product_link: string | null
   sample_available: boolean
   created_at: string
+  campaign_products?: { product_id: string }[]
 }
 
 export interface CampaignApplication {
@@ -148,9 +151,13 @@ export interface SiteSettings {
   calls_per_month_growth: number
   calls_per_month_scale: number
   calls_per_month_elite: number
+  booking_link_initiation: string | null
+  booking_link_foundation: string | null
   booking_link_growth: string | null
   booking_link_scale: string | null
   booking_link_elite: string | null
+  google_sheets_url: string | null
+  last_synced_at: string | null
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {

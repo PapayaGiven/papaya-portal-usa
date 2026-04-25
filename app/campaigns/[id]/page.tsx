@@ -3,7 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@/components/Nav'
 import ApplicationForm from './ApplicationForm'
-import { Campaign, Creator, LEVEL_CONFIG } from '@/lib/types'
+import { Campaign, Creator, Product, LEVEL_CONFIG } from '@/lib/types'
 
 export default async function CampaignDetailPage({ params }: { params: { id: string } }) {
   const supabase = await createClient()
@@ -11,9 +11,10 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [campaignRes, creatorRes] = await Promise.all([
+  const [campaignRes, creatorRes, linkedProductsRes] = await Promise.all([
     supabase.from('campaigns').select('*').eq('id', params.id).single(),
     supabase.from('creators').select('level').eq('email', user.email!).single(),
+    supabase.from('campaign_products').select('product:products(*)').eq('campaign_id', params.id),
   ])
 
   if (!campaignRes.data) notFound()
@@ -21,6 +22,8 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
   const campaign = campaignRes.data as Campaign
   const creator = creatorRes.data as Pick<Creator, 'level'> | null
   const levelConfig = LEVEL_CONFIG[campaign.min_level]
+  const linkedProducts: Product[] = ((linkedProductsRes.data ?? []) as unknown as Array<{ product: Product | Product[] | null }>)
+    .flatMap((r) => Array.isArray(r.product) ? r.product : r.product ? [r.product] : [])
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
@@ -112,6 +115,38 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
             </div>
           )}
         </div>
+
+        {/* Linked products */}
+        {linkedProducts.length > 0 && (
+          <div className="bg-white rounded-3xl border border-brand-pink/20 shadow-sm p-6 mb-6">
+            <h2 className="font-playfair text-xl text-brand-black mb-4">Productos vinculados</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {linkedProducts.map((p) => (
+                <a
+                  key={p.id}
+                  href={p.product_link ?? '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-2xl border border-gray-100 hover:border-brand-green/40 hover:bg-brand-light-pink/30 transition"
+                >
+                  {p.image_url ? (
+                    <img src={p.image_url} alt={p.name} className="w-14 h-14 object-cover rounded-xl border border-gray-100 shrink-0" />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-brand-light-pink flex items-center justify-center shrink-0">
+                      <span className="font-playfair text-lg text-brand-pink">{p.name.charAt(0)}</span>
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="font-dm-sans font-semibold text-sm text-brand-black truncate">{p.name}</p>
+                    {p.commission_rate != null && (
+                      <p className="font-dm-sans text-xs text-brand-pink font-bold">{p.commission_rate}% comisión</p>
+                    )}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">

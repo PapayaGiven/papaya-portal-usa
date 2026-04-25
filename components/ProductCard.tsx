@@ -1,19 +1,15 @@
-import { Product, PRODUCT_TYPE_COLORS, PRODUCT_TYPE_LABELS, ProductType } from '@/lib/types'
+import { Product } from '@/lib/types'
 
 interface ProductCardProps {
   product: Product
 }
 
 export default function ProductCard({ product }: ProductCardProps) {
-  const pType = (product.product_type ?? 'hero') as ProductType
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-sm transition-shadow flex flex-col gap-3">
-      {/* Top: type badge + niche + exclusive */}
+      {/* Top: niche + exclusive */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className={`font-dm-sans text-xs font-bold px-2.5 py-1 rounded-full border ${PRODUCT_TYPE_COLORS[pType]}`}>
-            {PRODUCT_TYPE_LABELS[pType]}
-          </span>
           {product.niche && (
             <span className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-2.5 py-1 rounded-full">
               {product.niche}

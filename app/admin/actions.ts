@@ -86,19 +86,41 @@ export async function toggleCreatorActive(id: string, isActive: boolean): Promis
   revalidatePath('/admin')
 }
 
-export async function addCreator(name: string, email: string): Promise<{ error?: string }> {
+function generateAccessCode(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const rand = (set: string, n: number) => Array.from({ length: n }, () => set[Math.floor(Math.random() * set.length)]).join('')
+  return `${rand(letters, 3)}-${rand('0123456789', 3)}-${rand(letters, 3)}`
+}
+
+async function generateUniqueAccessCode(): Promise<string> {
+  const supabase = createAdminClient()
+  for (let i = 0; i < 10; i++) {
+    const code = generateAccessCode()
+    const { data } = await supabase.from('creators').select('id').eq('access_code', code).maybeSingle()
+    if (!data) return code
+  }
+  return generateAccessCode()
+}
+
+export async function addCreator(name: string, email: string): Promise<{ error?: string; access_code?: string }> {
   const supabase = createAdminClient()
 
-  const { error: dbError } = await supabase.from('creators').insert({ name, email })
+  const access_code = await generateUniqueAccessCode()
+
+  const { error: dbError } = await supabase.from('creators').insert({ name, email, access_code })
   if (dbError) return { error: dbError.message }
 
-  const { error: authError } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
-  })
-  if (authError) return { error: `Creator created, but invite failed: ${authError.message}` }
-
   revalidatePath('/admin')
-  return {}
+  return { access_code }
+}
+
+export async function regenerateAccessCode(id: string): Promise<{ error?: string; access_code?: string }> {
+  const supabase = createAdminClient()
+  const access_code = await generateUniqueAccessCode()
+  const { error } = await supabase.from('creators').update({ access_code }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return { access_code }
 }
 
 export async function resendInvite(email: string): Promise<{ error?: string }> {
@@ -107,6 +129,71 @@ export async function resendInvite(email: string): Promise<{ error?: string }> {
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
   })
   if (error) return { error: error.message }
+  return {}
+}
+
+// ── Onboarding ────────────────────────────────────────────────────────────────
+
+export async function verifyAccessCode(code: string): Promise<{ error?: string; name?: string; email?: string }> {
+  const supabase = createAdminClient()
+  const cleaned = code.trim().toUpperCase()
+  const { data, error } = await supabase
+    .from('creators')
+    .select('name, email, has_completed_onboarding')
+    .eq('access_code', cleaned)
+    .maybeSingle()
+  if (error) return { error: error.message }
+  if (!data) return { error: 'invalid' }
+  if (data.has_completed_onboarding) return { error: 'already_completed' }
+  return { name: data.name ?? '', email: data.email ?? '' }
+}
+
+export async function completeOnboarding(data: {
+  access_code: string
+  email: string
+  password: string
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const cleaned = data.access_code.trim().toUpperCase()
+
+  const { data: creator, error: fetchErr } = await supabase
+    .from('creators')
+    .select('id, email, has_completed_onboarding')
+    .eq('access_code', cleaned)
+    .maybeSingle()
+
+  if (fetchErr) return { error: fetchErr.message }
+  if (!creator) return { error: 'Código no válido.' }
+  if (creator.has_completed_onboarding) return { error: 'Esta cuenta ya fue creada. Inicia sesión.' }
+
+  const email = data.email.trim().toLowerCase()
+
+  const { data: { users } } = await supabase.auth.admin.listUsers()
+  const existingAuth = users.find((u) => u.email === email)
+
+  if (existingAuth) {
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(existingAuth.id, {
+      password: data.password,
+      email_confirm: true,
+    })
+    if (updateErr) return { error: updateErr.message }
+  } else {
+    const { error: createErr } = await supabase.auth.admin.createUser({
+      email,
+      password: data.password,
+      email_confirm: true,
+    })
+    if (createErr) return { error: createErr.message }
+  }
+
+  const { error: updErr } = await supabase
+    .from('creators')
+    .update({ email, has_completed_onboarding: true })
+    .eq('id', creator.id)
+
+  if (updErr) return { error: updErr.message }
+
+  revalidatePath('/admin')
   return {}
 }
 
@@ -193,6 +280,15 @@ export async function toggleProductExclusive(id: string, isExclusive: boolean): 
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
 
+async function syncCampaignProducts(campaignId: string, productIds: string[]) {
+  const supabase = createAdminClient()
+  await supabase.from('campaign_products').delete().eq('campaign_id', campaignId)
+  if (productIds.length > 0) {
+    const rows = productIds.map((product_id) => ({ campaign_id: campaignId, product_id }))
+    await supabase.from('campaign_products').insert(rows)
+  }
+}
+
 export async function addCampaign(data: {
   brand_name: string
   description: string
@@ -204,13 +300,18 @@ export async function addCampaign(data: {
   status: string
   brand_logo_url: string | null
   product_id: string | null
+  product_ids?: string[]
   budget: number | null
   product_link: string | null
   sample_available: boolean
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
-  const { error } = await supabase.from('campaigns').insert(data)
+  const { product_ids, ...insertData } = data
+  const { data: inserted, error } = await supabase.from('campaigns').insert(insertData).select('id').single()
   if (error) return { error: error.message }
+  if (inserted && product_ids) {
+    await syncCampaignProducts(inserted.id, product_ids)
+  }
   revalidatePath('/admin')
   return {}
 }
@@ -228,14 +329,19 @@ export async function updateCampaign(
     status: string
     brand_logo_url: string | null
     product_id: string | null
+    product_ids: string[]
     budget: number | null
     product_link: string | null
     sample_available: boolean
   }>
 ): Promise<{ error?: string }> {
   const supabase = createAdminClient()
-  const { error } = await supabase.from('campaigns').update(data).eq('id', id)
+  const { product_ids, ...updateData } = data
+  const { error } = await supabase.from('campaigns').update(updateData).eq('id', id)
   if (error) return { error: error.message }
+  if (product_ids !== undefined) {
+    await syncCampaignProducts(id, product_ids)
+  }
   revalidatePath('/admin')
   return {}
 }

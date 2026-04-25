@@ -26,7 +26,7 @@ export default async function AdminPage() {
       .order('commission_rate', { ascending: false }),
     supabase
       .from('campaigns')
-      .select('*')
+      .select('*, campaign_products(product_id)')
       .order('created_at', { ascending: false }),
     supabase
       .from('campaign_applications')
