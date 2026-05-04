@@ -124,15 +124,6 @@ export async function regenerateAccessCode(id: string): Promise<{ error?: string
   return { access_code }
 }
 
-export async function resendInvite(email: string): Promise<{ error?: string }> {
-  const supabase = createAdminClient()
-  const { error } = await supabase.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'}/auth/confirm`,
-  })
-  if (error) return { error: error.message }
-  return {}
-}
-
 // ── Onboarding ────────────────────────────────────────────────────────────────
 
 export async function verifyAccessCode(code: string): Promise<{ error?: string; name?: string; email?: string }> {

@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, resendInvite, regenerateAccessCode,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, regenerateAccessCode,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
@@ -482,17 +482,6 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                       className="text-xs text-gray-500 hover:text-brand-green transition px-2 py-1 rounded-lg hover:bg-gray-100"
                     >
                       {c.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      disabled={isPending}
-                      onClick={() => startTransition(async () => {
-                        const r = await resendInvite(c.email)
-                        if (r.error) fb(`Error: ${r.error}`)
-                        else fb('✓ Invite sent!')
-                      })}
-                      className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition"
-                    >
-                      Resend invite
                     </button>
                     <button
                       disabled={isPending}
