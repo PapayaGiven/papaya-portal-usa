@@ -109,6 +109,11 @@ export interface StrategyProduct {
   hooks: string[]
   scripts: string | null
   trends: string | null
+  is_external: boolean
+  external_product_name: string | null
+  external_brand: string | null
+  external_commission: number | null
+  external_link: string | null
   created_at: string
   product?: Product | null
   campaign?: Campaign | null

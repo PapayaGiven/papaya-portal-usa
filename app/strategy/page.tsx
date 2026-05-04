@@ -83,16 +83,36 @@ export default async function StrategyPage() {
   let strategyId: string | null = null
   let strategyProducts: StrategyProduct[] = []
   let checklistEntries: { strategy_product_id: string; video_posted: boolean; live_done: boolean }[] = []
+  let strategyMonthLabel: string = monthLabel
+  let isFallbackStrategy = false
 
   if (creator) {
-    const { data: stratData } = await supabase
+    let { data: stratData } = await supabase
       .from('strategies')
-      .select('id')
+      .select('id, month')
       .eq('creator_id', creator.id)
       .eq('month', monthDate)
       .maybeSingle()
 
-    console.log('[strategy] Strategy found:', stratData)
+    console.log('[strategy] Strategy found for current month:', stratData)
+
+    if (!stratData) {
+      const { data: fallback } = await supabase
+        .from('strategies')
+        .select('id, month')
+        .eq('creator_id', creator.id)
+        .order('month', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (fallback) {
+        stratData = fallback
+        isFallbackStrategy = true
+        const [y, m] = fallback.month.split('-')
+        strategyMonthLabel = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+        console.log('[strategy] Falling back to most recent strategy:', fallback)
+      }
+    }
 
     if (stratData) {
       strategyId = stratData.id
@@ -107,7 +127,10 @@ export default async function StrategyPage() {
         .eq('strategy_id', stratData.id)
         .order('created_at')
 
-      strategyProducts = (products ?? []) as StrategyProduct[]
+      const allProducts = (products ?? []) as StrategyProduct[]
+      strategyProducts = allProducts.filter(
+        (sp) => sp.product_id != null || (sp.external_product_name && sp.external_product_name.trim() !== '')
+      )
 
       const { data: checklist } = await supabase
         .from('daily_checklist')
@@ -155,14 +178,20 @@ export default async function StrategyPage() {
 
   // Creative bank data from strategy_products
   const creativeProducts = strategyProducts
-    .filter((sp) => sp.product)
-    .map((sp) => ({
-      id: sp.id,
-      productName: (sp.product as { name: string })?.name ?? 'Producto',
-      hooks: (sp as unknown as { hooks?: string[] }).hooks ?? [],
-      scripts: (sp as unknown as { scripts?: string | null }).scripts ?? null,
-      trends: (sp as unknown as { trends?: string | null }).trends ?? null,
-    }))
+    .map((sp) => {
+      const productName = sp.is_external
+        ? (sp.external_product_name ?? '').trim()
+        : (sp.product as { name: string } | null)?.name ?? ''
+      if (!productName) return null
+      return {
+        id: sp.id,
+        productName,
+        hooks: (sp as unknown as { hooks?: string[] }).hooks ?? [],
+        scripts: (sp as unknown as { scripts?: string | null }).scripts ?? null,
+        trends: (sp as unknown as { trends?: string | null }).trends ?? null,
+      }
+    })
+    .filter((p): p is { id: string; productName: string; hooks: string[]; scripts: string | null; trends: string | null } => p !== null)
 
   const hasChecklist = strategyProducts.some(
     (sp) => (sp.videos_per_day ?? 0) > 0 || (sp.live_hours_per_week ?? 0) > 0
@@ -184,6 +213,11 @@ export default async function StrategyPage() {
           <div>
             <h1 className="font-playfair text-4xl text-brand-black mb-1">Mi Estrategia</h1>
             <p className="font-dm-sans text-sm text-gray-500">{monthLabel}</p>
+            {isFallbackStrategy && (
+              <p className="font-dm-sans text-xs text-amber-700 bg-amber-50 border border-amber-200 inline-block mt-2 px-3 py-1 rounded-full">
+                Mostrando tu estrategia más reciente ({strategyMonthLabel}). Tu estrategia de este mes aún no está lista.
+              </p>
+            )}
           </div>
         </div>
 
@@ -231,39 +265,62 @@ export default async function StrategyPage() {
                     const priorityStyle = PRIORITY_STYLES[sp.priority] ?? PRIORITY_STYLES.Supporting
                     const product = sp.product as { name: string; niche: string | null; commission_rate: number | null; image_url: string | null } | null
                     const campaign = sp.campaign as { brand_name: string } | null
+                    const isExternal = !!sp.is_external || (!product && !!sp.external_product_name)
+                    const displayName = isExternal
+                      ? (sp.external_product_name?.trim() || 'Producto externo')
+                      : (product?.name ?? 'Product')
+                    const displayNiche = isExternal ? sp.external_brand : product?.niche
+                    const displayCommission = isExternal ? sp.external_commission : product?.commission_rate
+                    const displayImage = isExternal ? null : product?.image_url
+                    const externalLink = isExternal ? sp.external_link : null
 
                     return (
                       <div key={sp.id} className="bg-white rounded-2xl border border-brand-pink/20 shadow-sm overflow-hidden">
                         {/* Product header */}
                         <div className="px-6 py-5 border-b border-gray-50 flex items-start justify-between gap-4">
                           <div className="flex items-center gap-4">
-                            {product?.image_url ? (
+                            {displayImage ? (
                               <img
-                                src={product.image_url}
-                                alt={product?.name}
+                                src={displayImage}
+                                alt={displayName}
                                 className="w-14 h-14 object-cover rounded-xl border border-gray-100 shrink-0"
                               />
                             ) : (
                               <div className="w-14 h-14 rounded-xl bg-brand-light-pink flex items-center justify-center shrink-0">
                                 <span className="font-playfair text-2xl text-brand-pink">
-                                  {product?.name?.charAt(0) ?? '?'}
+                                  {displayName.charAt(0) || '?'}
                                 </span>
                               </div>
                             )}
                             <div>
-                              <h2 className="font-playfair text-xl text-brand-black leading-tight">
-                                {product?.name ?? 'Product'}
-                              </h2>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                {product?.niche && (
-                                  <span className="font-dm-sans text-xs bg-brand-light-pink text-brand-green px-2 py-0.5 rounded-full">
-                                    {product.niche}
+                              <h2 className="font-playfair text-xl text-brand-black leading-tight flex items-center gap-2 flex-wrap">
+                                {displayName}
+                                {isExternal && (
+                                  <span className="font-dm-sans text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-500 border border-gray-200 px-2 py-0.5 rounded-full">
+                                    Producto externo
                                   </span>
                                 )}
-                                {product?.commission_rate != null && (
-                                  <span className="font-dm-sans text-xs font-bold text-brand-pink">
-                                    {product.commission_rate}% Comisión
+                              </h2>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                {displayNiche && (
+                                  <span className="font-dm-sans text-xs bg-brand-light-pink text-brand-green px-2 py-0.5 rounded-full">
+                                    {displayNiche}
                                   </span>
+                                )}
+                                {displayCommission != null && (
+                                  <span className="font-dm-sans text-xs font-bold text-brand-pink">
+                                    {displayCommission}% Comisión
+                                  </span>
+                                )}
+                                {externalLink && (
+                                  <a
+                                    href={externalLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-dm-sans text-xs text-brand-green hover:underline"
+                                  >
+                                    Ver producto →
+                                  </a>
                                 )}
                               </div>
                             </div>

@@ -18,7 +18,15 @@ const PRIORITY_COLORS = {
   Supporting: 'bg-gray-100 text-gray-600 border-gray-200',
 }
 
-function emptyProduct(): StrategyProductInput & { is_external?: boolean; external_name?: string; external_brand?: string; external_commission?: string; external_link?: string } {
+type StrategyProductForm = StrategyProductInput & {
+  is_external: boolean
+  external_product_name: string
+  external_brand: string
+  external_commission: string
+  external_link: string
+}
+
+function emptyProduct(): StrategyProductForm {
   return {
     product_id: '',
     priority: 'Secondary',
@@ -34,7 +42,7 @@ function emptyProduct(): StrategyProductInput & { is_external?: boolean; externa
     quick_checklist: [],
     videos: [],
     is_external: false,
-    external_name: '',
+    external_product_name: '',
     external_brand: '',
     external_commission: '',
     external_link: '',
@@ -48,7 +56,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
   const [creatorId, setCreatorId] = useState('')
   const [month, setMonth] = useState(defaultMonth.slice(0, 7)) // "YYYY-MM"
   const [selectedWeek, setSelectedWeek] = useState<number>(1) // week 1-4
-  const [strategyProducts, setStrategyProducts] = useState<(StrategyProductInput & { is_external?: boolean; external_name?: string; external_brand?: string; external_commission?: string; external_link?: string })[]>([emptyProduct()])
+  const [strategyProducts, setStrategyProducts] = useState<StrategyProductForm[]>([emptyProduct()])
   const [hashtagInputs, setHashtagInputs] = useState<string[]>([''])
   const [productSearches, setProductSearches] = useState<string[]>([''])
   const [productSearchDebounced, setProductSearchDebounced] = useState<string[]>([''])
@@ -87,24 +95,32 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
         return
       }
       type RawProduct = Record<string, unknown> & { videos?: Record<string, unknown>[] }
-      const loaded: StrategyProductInput[] = result.data.products.map((p: RawProduct) => ({
-        product_id: (p.product_id as string) ?? '',
-        priority: (p.priority as string) ?? 'Secondary',
-        videos_per_day: p.videos_per_day as number | null,
-        live_hours_per_week: p.live_hours_per_week as number | null,
-        gmv_target: p.gmv_target as number | null,
-        strategy_note: (p.strategy_note as string) ?? '',
-        hashtags: (p.hashtags as string[]) ?? [],
-        is_retainer: (p.is_retainer as boolean) ?? false,
-        campaign_id: (p.campaign_id as string | null) ?? null,
-        brief_url: (p.brief_url as string | null) ?? null,
-        video_focus: (p.video_focus as string) ?? '',
-        quick_checklist: (p.quick_checklist as string[]) ?? [],
-        videos: ((p.videos ?? []) as Record<string, unknown>[]).map((v) => ({
-          video_url: (v.video_url as string) ?? '',
-          thumbnail_url: (v.thumbnail_url as string) ?? '',
-        })),
-      }))
+      const loaded: StrategyProductForm[] = result.data.products.map((p: RawProduct) => {
+        const externalCommission = p.external_commission
+        return {
+          product_id: (p.product_id as string) ?? '',
+          priority: (p.priority as string) ?? 'Secondary',
+          videos_per_day: p.videos_per_day as number | null,
+          live_hours_per_week: p.live_hours_per_week as number | null,
+          gmv_target: p.gmv_target as number | null,
+          strategy_note: (p.strategy_note as string) ?? '',
+          hashtags: (p.hashtags as string[]) ?? [],
+          is_retainer: (p.is_retainer as boolean) ?? false,
+          campaign_id: (p.campaign_id as string | null) ?? null,
+          brief_url: (p.brief_url as string | null) ?? null,
+          video_focus: (p.video_focus as string) ?? '',
+          quick_checklist: (p.quick_checklist as string[]) ?? [],
+          videos: ((p.videos ?? []) as Record<string, unknown>[]).map((v) => ({
+            video_url: (v.video_url as string) ?? '',
+            thumbnail_url: (v.thumbnail_url as string) ?? '',
+          })),
+          is_external: (p.is_external as boolean) ?? false,
+          external_product_name: (p.external_product_name as string) ?? '',
+          external_brand: (p.external_brand as string) ?? '',
+          external_commission: externalCommission == null ? '' : String(externalCommission),
+          external_link: (p.external_link as string) ?? '',
+        }
+      })
       const finalProducts = loaded.length > 0 ? loaded : [emptyProduct()]
       setStrategyProducts(finalProducts)
       setHashtagInputs(finalProducts.map((p) => p.hashtags.join(', ')))
@@ -113,7 +129,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
     })
   }
 
-  function updateProduct(index: number, updates: Partial<StrategyProductInput>) {
+  function updateProduct(index: number, updates: Partial<StrategyProductForm>) {
     setStrategyProducts((prev) => prev.map((p, i) => i === index ? { ...p, ...updates } : p))
   }
 
@@ -265,7 +281,10 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
               {/* External product toggle */}
               <label className="flex items-center gap-2 cursor-pointer">
                 <div
-                  onClick={() => updateProduct(pi, { is_external: !sp.is_external, product_id: '' } as Partial<StrategyProductInput>)}
+                  onClick={() => updateProduct(pi, sp.is_external
+                    ? { is_external: false, external_product_name: '', external_brand: '', external_commission: '', external_link: '' }
+                    : { is_external: true, product_id: '', campaign_id: null }
+                  )}
                   className={`relative w-10 h-6 rounded-full transition-colors ${sp.is_external ? 'bg-brand-pink' : 'bg-gray-200'}`}
                 >
                   <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${sp.is_external ? 'translate-x-5' : 'translate-x-1'}`} />
@@ -280,8 +299,8 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                     <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Nombre del producto</label>
                     <input
                       type="text"
-                      value={sp.external_name ?? ''}
-                      onChange={(e) => updateProduct(pi, { external_name: e.target.value } as Partial<StrategyProductInput>)}
+                      value={sp.external_product_name ?? ''}
+                      onChange={(e) => updateProduct(pi, { external_product_name: e.target.value })}
                       placeholder="ej. Serum Vitamina C"
                       className="input-field w-full"
                     />
@@ -291,7 +310,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                     <input
                       type="text"
                       value={sp.external_brand ?? ''}
-                      onChange={(e) => updateProduct(pi, { external_brand: e.target.value } as Partial<StrategyProductInput>)}
+                      onChange={(e) => updateProduct(pi, { external_brand: e.target.value })}
                       placeholder="ej. Glow Labs"
                       className="input-field w-full"
                     />
@@ -301,7 +320,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                     <input
                       type="text"
                       value={sp.external_commission ?? ''}
-                      onChange={(e) => updateProduct(pi, { external_commission: e.target.value } as Partial<StrategyProductInput>)}
+                      onChange={(e) => updateProduct(pi, { external_commission: e.target.value })}
                       placeholder="ej. 15"
                       className="input-field w-full"
                     />
@@ -311,7 +330,7 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                     <input
                       type="url"
                       value={sp.external_link ?? ''}
-                      onChange={(e) => updateProduct(pi, { external_link: e.target.value } as Partial<StrategyProductInput>)}
+                      onChange={(e) => updateProduct(pi, { external_link: e.target.value })}
                       placeholder="https://…"
                       className="input-field w-full"
                     />

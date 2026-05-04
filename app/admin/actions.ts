@@ -558,6 +558,11 @@ export interface StrategyProductInput {
   video_focus: string
   quick_checklist: string[]
   videos: VideoInput[]
+  is_external?: boolean
+  external_product_name?: string
+  external_brand?: string
+  external_commission?: string | number | null
+  external_link?: string
 }
 
 export async function saveStrategy(data: {
@@ -578,11 +583,24 @@ export async function saveStrategy(data: {
   await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id)
 
   for (const p of data.products) {
+    const isExternal = !!p.is_external
+    const externalName = (p.external_product_name ?? '').trim()
+
+    if (!isExternal && !p.product_id) continue
+    if (isExternal && !externalName) continue
+
+    const externalCommission =
+      p.external_commission == null || p.external_commission === ''
+        ? null
+        : typeof p.external_commission === 'number'
+          ? p.external_commission
+          : Number(p.external_commission)
+
     const { data: sp, error: spError } = await supabase
       .from('strategy_products')
       .insert({
         strategy_id: strategy.id,
-        product_id: p.product_id || null,
+        product_id: isExternal ? null : (p.product_id || null),
         priority: p.priority,
         videos_per_day: p.videos_per_day,
         live_hours_per_week: p.live_hours_per_week,
@@ -590,10 +608,15 @@ export async function saveStrategy(data: {
         strategy_note: p.strategy_note,
         hashtags: p.hashtags,
         is_retainer: p.is_retainer,
-        campaign_id: p.campaign_id || null,
+        campaign_id: isExternal ? null : (p.campaign_id || null),
         brief_url: p.brief_url || null,
         video_focus: p.video_focus || null,
         quick_checklist: p.quick_checklist ?? [],
+        is_external: isExternal,
+        external_product_name: isExternal ? externalName : null,
+        external_brand: isExternal ? ((p.external_brand ?? '').trim() || null) : null,
+        external_commission: isExternal && externalCommission !== null && !Number.isNaN(externalCommission) ? externalCommission : null,
+        external_link: isExternal ? ((p.external_link ?? '').trim() || null) : null,
       })
       .select('id')
       .single()
