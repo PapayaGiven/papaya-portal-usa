@@ -106,8 +106,9 @@ export async function addCreator(name: string, email: string): Promise<{ error?:
   const supabase = createAdminClient()
 
   const access_code = await generateUniqueAccessCode()
+  const normalizedEmail = email.trim().toLowerCase()
 
-  const { error: dbError } = await supabase.from('creators').insert({ name, email, access_code })
+  const { error: dbError } = await supabase.from('creators').insert({ name, email: normalizedEmail, access_code })
   if (dbError) return { error: dbError.message }
 
   revalidatePath('/admin')

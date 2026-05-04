@@ -60,11 +60,16 @@ export default async function StrategyPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
+  const authEmail = (user.email ?? '').trim().toLowerCase()
+  console.log('[strategy] Auth user email:', authEmail)
+
   const { data: creator } = await supabase
     .from('creators')
     .select('id, name, level')
-    .eq('email', user.email!)
-    .single()
+    .ilike('email', authEmail)
+    .maybeSingle()
+
+  console.log('[strategy] Creator record found:', creator)
 
   const level = (creator?.level ?? 'Initiation') as CreatorLevel
   const showHashtags = canSeeHashtags(level)
@@ -86,6 +91,8 @@ export default async function StrategyPage() {
       .eq('creator_id', creator.id)
       .eq('month', monthDate)
       .maybeSingle()
+
+    console.log('[strategy] Strategy found:', stratData)
 
     if (stratData) {
       strategyId = stratData.id
@@ -209,10 +216,13 @@ export default async function StrategyPage() {
                 <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
                   <p className="text-4xl mb-3">📋</p>
                   <h2 className="font-playfair text-2xl text-brand-black mb-2">
-                    Aún no hay estrategia para {monthLabel}
+                    Aún no tienes una estrategia asignada para este mes.
                   </h2>
                   <p className="font-dm-sans text-gray-500 text-sm">
-                    Tu agencia creará tu estrategia mensual pronto.
+                    Tu account manager estará configurando tu estrategia pronto.{' '}
+                    <a href="/products" className="text-brand-green font-semibold hover:underline">
+                      ¡Mientras tanto, revisa tus productos! →
+                    </a>
                   </p>
                 </div>
               ) : (
@@ -385,10 +395,13 @@ export default async function StrategyPage() {
           <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
             <p className="text-4xl mb-3">📋</p>
             <h2 className="font-playfair text-2xl text-brand-black mb-2">
-              Tu perfil se está configurando
+              Aún no tienes una estrategia asignada para este mes.
             </h2>
             <p className="font-dm-sans text-gray-500 text-sm">
-              Tu agencia activará tu perfil pronto.
+              Tu account manager estará configurando tu estrategia pronto.{' '}
+              <a href="/products" className="text-brand-green font-semibold hover:underline">
+                ¡Mientras tanto, revisa tus productos! →
+              </a>
             </p>
           </div>
         )}
