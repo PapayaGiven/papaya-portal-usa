@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition } from 'react'
 import { Creator, Product, Campaign } from '@/lib/types'
 import { saveStrategy, getStrategyForAdmin, StrategyProductInput, VideoInput } from '@/app/admin/actions'
 
@@ -59,7 +59,6 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
   const [strategyProducts, setStrategyProducts] = useState<StrategyProductForm[]>([emptyProduct()])
   const [hashtagInputs, setHashtagInputs] = useState<string[]>([''])
   const [productSearches, setProductSearches] = useState<string[]>([''])
-  const [productSearchDebounced, setProductSearchDebounced] = useState<string[]>([''])
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -67,13 +66,6 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
   function setProductSearch(index: number, value: string) {
     setProductSearches((prev) => prev.map((v, i) => i === index ? value : v))
   }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setProductSearchDebounced(productSearches)
-    }, 200)
-    return () => clearTimeout(timer)
-  }, [productSearches])
 
   function fb(msg: string) {
     setFeedback(msg)
@@ -351,37 +343,43 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
                           className="text-xs text-red-400 hover:text-red-600 shrink-0"
                         >× Cambiar</button>
                       </div>
-                    ) : (
-                      <div className="relative">
-                        <input
-                          type="text"
-                          value={productSearches[pi] ?? ''}
-                          onChange={(e) => setProductSearch(pi, e.target.value)}
-                          placeholder="Escribe para buscar productos..."
-                          className="input-field w-full"
-                        />
-                        {(productSearchDebounced[pi] ?? '').trim() && (
-                          <div className="absolute z-10 mt-1 w-full max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg divide-y divide-gray-50">
-                            {products
-                              .filter((p) => p.name.toLowerCase().includes((productSearchDebounced[pi] ?? '').toLowerCase()))
-                              .slice(0, 12)
-                              .map((p) => (
-                                <button
-                                  key={p.id}
-                                  type="button"
-                                  onClick={() => { updateProduct(pi, { product_id: p.id }); setProductSearch(pi, '') }}
-                                  className="w-full text-left px-3 py-2 text-sm font-dm-sans hover:bg-brand-light-pink transition"
-                                >
-                                  {p.name} <span className="text-xs text-gray-400">({p.commission_rate}%)</span>
-                                </button>
-                              ))}
-                            {products.filter((p) => p.name.toLowerCase().includes((productSearchDebounced[pi] ?? '').toLowerCase())).length === 0 && (
-                              <p className="px-3 py-2 text-xs text-gray-400">Sin resultados.</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )}
+                    ) : (() => {
+                      const query = (productSearches[pi] ?? '').trim().toLowerCase()
+                      const filtered = query
+                        ? products.filter((p) => p.name.toLowerCase().includes(query))
+                        : products
+                      return (
+                        <div className="space-y-1.5">
+                          <input
+                            type="text"
+                            value={productSearches[pi] ?? ''}
+                            onChange={(e) => setProductSearch(pi, e.target.value)}
+                            placeholder="Buscar producto..."
+                            className="input-field w-full"
+                          />
+                          <select
+                            value=""
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                updateProduct(pi, { product_id: e.target.value })
+                                setProductSearch(pi, '')
+                              }
+                            }}
+                            className="input-field w-full"
+                          >
+                            <option value="">Seleccionar producto...</option>
+                            {filtered.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} ({p.commission_rate}%)
+                              </option>
+                            ))}
+                          </select>
+                          <p className="font-dm-sans text-xs text-gray-400">
+                            Mostrando {filtered.length} de {products.length} productos
+                          </p>
+                        </div>
+                      )
+                    })()}
                   </div>
                   <div>
                     <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Campaña vinculada (opcional)</label>
