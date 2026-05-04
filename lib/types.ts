@@ -40,6 +40,9 @@ export interface Product {
   created_at: string
   approved_for_initiation: boolean
   product_type: ProductType
+  star_rating: number | null
+  review_count: number | null
+  units_sold: number | null
 }
 
 export interface Task {

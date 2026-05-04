@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Product, Campaign, CreatorLevel, ProductType } from '@/lib/types'
+import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
@@ -597,12 +597,12 @@ function ProductsTab({ products }: { products: Product[] }) {
   const [form, setForm] = useState({
     name: '', commission_rate: '', conversion_rate: '', niche: '',
     is_exclusive: false, image_url: '', product_link: '', showcase_link: '', sample_link: '', tags: [] as string[],
-    product_type: 'hero' as ProductType,
+    star_rating: '', review_count: '', units_sold: '',
   })
   const [editForm, setEditForm] = useState<Partial<{
     name: string; commission_rate: number; conversion_rate: number
     niche: string; is_exclusive: boolean; image_url: string | null; product_link: string | null; showcase_link: string | null; sample_link: string | null; tags: string[]
-    product_type: ProductType
+    star_rating: number | null; review_count: number | null; units_sold: number | null
   }>>({})
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -724,6 +724,18 @@ function ProductsTab({ products }: { products: Product[] }) {
             <input placeholder="Product link" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field" />
             <input placeholder="Showcase link (https://...)" value={form.showcase_link} onChange={(e) => setForm((f) => ({ ...f, showcase_link: e.target.value }))} className="input-field" />
             <input placeholder="Sample request link (https://...)" value={form.sample_link} onChange={(e) => setForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field" />
+            <div>
+              <label className="font-dm-sans text-xs font-semibold text-gray-500 mb-1 block">Calificación (estrellas)</label>
+              <input type="number" min="0" max="5" step="0.1" placeholder="ej. 4.6" value={form.star_rating} onChange={(e) => setForm((f) => ({ ...f, star_rating: e.target.value }))} className="input-field w-full" />
+            </div>
+            <div>
+              <label className="font-dm-sans text-xs font-semibold text-gray-500 mb-1 block"># de reseñas</label>
+              <input type="number" min="0" step="1" placeholder="ej. 108" value={form.review_count} onChange={(e) => setForm((f) => ({ ...f, review_count: e.target.value }))} className="input-field w-full" />
+            </div>
+            <div>
+              <label className="font-dm-sans text-xs font-semibold text-gray-500 mb-1 block">Unidades vendidas</label>
+              <input type="number" min="0" step="1" placeholder="ej. 9548" value={form.units_sold} onChange={(e) => setForm((f) => ({ ...f, units_sold: e.target.value }))} className="input-field w-full" />
+            </div>
             <label className="flex items-center gap-2 font-dm-sans text-sm text-gray-700">
               <input type="checkbox" checked={form.is_exclusive} onChange={(e) => setForm((f) => ({ ...f, is_exclusive: e.target.checked }))} className="rounded" />
               Exclusive
@@ -764,11 +776,14 @@ function ProductsTab({ products }: { products: Product[] }) {
                 showcase_link: form.showcase_link || null,
                 sample_link: form.sample_link || null,
                 tags: form.tags,
+                star_rating: form.star_rating === '' ? null : parseFloat(form.star_rating),
+                review_count: form.review_count === '' ? null : parseInt(form.review_count, 10),
+                units_sold: form.units_sold === '' ? null : parseInt(form.units_sold, 10),
               })
               if (r.error) fb(`Error: ${r.error}`)
               else {
                 fb('✓ Product added')
-                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', showcase_link: '', sample_link: '', tags: [], product_type: 'hero' })
+                setForm({ name: '', commission_rate: '', conversion_rate: '', niche: '', is_exclusive: false, image_url: '', product_link: '', showcase_link: '', sample_link: '', tags: [], star_rating: '', review_count: '', units_sold: '' })
                 setShowAdd(false)
               }
             })}
@@ -857,7 +872,9 @@ function ProductsTab({ products }: { products: Product[] }) {
                           showcase_link: p.showcase_link ?? '',
                           sample_link: p.sample_link ?? '',
                           tags: p.tags ?? [],
-                          product_type: (p.product_type ?? 'hero') as ProductType,
+                          star_rating: p.star_rating,
+                          review_count: p.review_count,
+                          units_sold: p.units_sold,
                         })
                       }
                     }} className="text-xs text-gray-500 hover:text-brand-green px-2 py-1 rounded-lg hover:bg-gray-100 transition">
@@ -910,6 +927,18 @@ function ProductsTab({ products }: { products: Product[] }) {
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Sample Request Link</p>
                         <input value={editForm.sample_link ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field w-full" placeholder="https://..." />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Calificación (estrellas)</p>
+                        <input type="number" min="0" max="5" step="0.1" value={editForm.star_rating ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, star_rating: e.target.value === '' ? null : parseFloat(e.target.value) }))} className="input-field w-full" placeholder="ej. 4.6" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1"># de reseñas</p>
+                        <input type="number" min="0" step="1" value={editForm.review_count ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, review_count: e.target.value === '' ? null : parseInt(e.target.value, 10) }))} className="input-field w-full" placeholder="ej. 108" />
+                      </div>
+                      <div>
+                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Unidades vendidas</p>
+                        <input type="number" min="0" step="1" value={editForm.units_sold ?? ''} onChange={(e) => setEditForm((f) => ({ ...f, units_sold: e.target.value === '' ? null : parseInt(e.target.value, 10) }))} className="input-field w-full" placeholder="ej. 9548" />
                       </div>
                     </div>
                     <div className="mt-3">

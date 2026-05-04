@@ -4,6 +4,28 @@ interface ProductCardProps {
   product: Product
 }
 
+function Stars({ rating }: { rating: number }) {
+  const clamped = Math.max(0, Math.min(5, rating))
+  return (
+    <span aria-label={`${clamped.toFixed(1)} de 5 estrellas`} className="inline-flex items-center">
+      {[0, 1, 2, 3, 4].map((i) => {
+        const fill = Math.max(0, Math.min(1, clamped - i))
+        return (
+          <span key={i} className="relative inline-block w-3.5 h-3.5 leading-none">
+            <span className="absolute inset-0 text-gray-200">★</span>
+            <span
+              className="absolute inset-0 text-amber-400 overflow-hidden"
+              style={{ width: `${fill * 100}%` }}
+            >
+              ★
+            </span>
+          </span>
+        )
+      })}
+    </span>
+  )
+}
+
 export default function ProductCard({ product }: ProductCardProps) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-sm transition-shadow flex flex-col gap-3">
@@ -38,12 +60,37 @@ export default function ProductCard({ product }: ProductCardProps) {
         {product.name}
       </h3>
 
-      {/* Commission */}
-      <div>
-        <p className="font-dm-sans font-bold text-2xl text-brand-pink leading-none">
-          {product.commission_rate}%
-        </p>
-        <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Comisión</p>
+      {/* Rating */}
+      {product.star_rating != null && (
+        <div className="flex items-center gap-1.5">
+          <Stars rating={product.star_rating} />
+          <span className="font-dm-sans text-sm font-semibold text-brand-black">
+            {product.star_rating.toFixed(1)}
+          </span>
+          {product.review_count != null && (
+            <span className="font-dm-sans text-xs text-gray-400">
+              ({product.review_count.toLocaleString('es-MX')} reseñas)
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Commission + units */}
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="font-dm-sans font-bold text-2xl text-brand-pink leading-none">
+            {product.commission_rate}%
+          </p>
+          <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Comisión</p>
+        </div>
+        {product.units_sold != null && (
+          <div className="text-right">
+            <p className="font-dm-sans font-bold text-base text-brand-black leading-none">
+              {product.units_sold.toLocaleString('es-MX')}
+            </p>
+            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">vendidas</p>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-2 mt-3">

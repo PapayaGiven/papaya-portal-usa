@@ -226,7 +226,9 @@ export async function addProduct(data: {
   showcase_link?: string | null
   sample_link?: string | null
   tags: string[]
-  product_type?: string
+  star_rating?: number | null
+  review_count?: number | null
+  units_sold?: number | null
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const { error } = await supabase.from('products').insert(data)
@@ -248,7 +250,9 @@ export async function updateProduct(
     showcase_link: string | null
     sample_link: string | null
     tags: string[]
-    product_type: string
+    star_rating: number | null
+    review_count: number | null
+    units_sold: number | null
   }>
 ): Promise<{ error?: string }> {
   const supabase = createAdminClient()
