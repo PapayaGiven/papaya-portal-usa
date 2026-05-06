@@ -26,7 +26,7 @@ export default async function AdminPage() {
       .order('commission_rate', { ascending: false }),
     supabase
       .from('campaigns')
-      .select('*, campaign_products(product_id)')
+      .select('*')
       .order('created_at', { ascending: false }),
     supabase
       .from('campaign_applications')
@@ -79,11 +79,40 @@ export default async function AdminPage() {
       .order('papaya_pick_score', { ascending: false }),
   ])
 
+  // Surface fetch errors in the server log so future regressions don't
+  // silently render an empty admin tab.
+  for (const [name, res] of [
+    ['creators', creatorsRes], ['products', productsRes], ['campaigns', campaignsRes],
+    ['applications', applicationsRes], ['product_requests', productRequestsRes],
+    ['initiation_selections', initiationSelectionsRes], ['levels', levelsRes],
+    ['rewards', rewardsRes], ['creator_rewards', creatorRewardsRes],
+    ['settings', settingsRes], ['deliverables', deliverablesRes],
+    ['level_config', levelConfigRes], ['violations', violationsRes],
+    ['announcements', announcementsRes], ['papaya_picks', papayaPicksRes],
+  ] as const) {
+    if (res.error) console.error(`[admin] ${name} fetch error:`, res.error.message)
+  }
+
+  // Merge campaign_products into campaigns separately, since the embedded
+  // join was failing silently when the relationship couldn't be resolved.
+  const campaignProductsRes = await supabase.from('campaign_products').select('campaign_id, product_id')
+  if (campaignProductsRes.error) console.error('[admin] campaign_products fetch error:', campaignProductsRes.error.message)
+  const cpByCampaign = new Map<string, { product_id: string }[]>()
+  for (const row of campaignProductsRes.data ?? []) {
+    const arr = cpByCampaign.get(row.campaign_id) ?? []
+    arr.push({ product_id: row.product_id })
+    cpByCampaign.set(row.campaign_id, arr)
+  }
+  const campaignsWithProducts = (campaignsRes.data ?? []).map((c) => ({
+    ...c,
+    campaign_products: cpByCampaign.get(c.id) ?? [],
+  }))
+
   return (
     <AdminPanel
       creators={creatorsRes.data ?? []}
       products={productsRes.data ?? []}
-      campaigns={campaignsRes.data ?? []}
+      campaigns={campaignsWithProducts}
       applications={applicationsRes.data ?? []}
       productRequests={productRequestsRes.data ?? []}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
