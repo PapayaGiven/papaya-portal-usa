@@ -353,9 +353,8 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                    {c.has_completed_onboarding ? 'Completado' : 'Pendiente'}
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                    {c.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -512,6 +511,51 @@ function CreatorsTab({ creators, products: _products }: { creators: Creator[]; p
               {expandedElite === c.id && (
                 <tr key={`${c.id}-elite`} className="bg-amber-50/50">
                   <td colSpan={11} className="px-6 py-4">
+                    {/* Access code card */}
+                    <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div>
+                          <p className="font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Código de acceso</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {c.access_code ? (
+                              <code className="font-mono text-lg font-bold tracking-widest text-brand-black bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5">
+                                {c.access_code}
+                              </code>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">Sin código asignado</span>
+                            )}
+                            {c.access_code && (
+                              <>
+                                <button
+                                  onClick={() => copyToClipboard(c.access_code!, 'Código')}
+                                  className="font-dm-sans text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
+                                >
+                                  📋 Copiar
+                                </button>
+                                <button
+                                  disabled={isPending}
+                                  onClick={() => {
+                                    if (confirm(`¿Regenerar código de acceso para ${c.name || c.email}? El código anterior dejará de funcionar.`)) {
+                                      startTransition(async () => {
+                                        const r = await regenerateAccessCode(c.id)
+                                        if (r.error) fb(`Error: ${r.error}`)
+                                        else fb(`✓ Nuevo código: ${r.access_code}`)
+                                      })
+                                    }
+                                  }}
+                                  className="font-dm-sans text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+                                >
+                                  ↻ Regenerar
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {c.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
+                        </span>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                       <div>
                         <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
