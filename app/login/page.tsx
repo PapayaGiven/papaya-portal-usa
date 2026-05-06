@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
@@ -9,11 +9,22 @@ import { createClient } from '@/lib/supabase/client'
 type Mode = 'choice' | 'login'
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<Mode>('choice')
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  )
+}
+
+function LoginPageInner() {
+  const searchParams = useSearchParams()
+  const resetSuccess = searchParams.get('reset') === 'success'
+  const [mode, setMode] = useState<Mode>(resetSuccess ? 'login' : 'choice')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showResetBanner, setShowResetBanner] = useState(resetSuccess)
   const router = useRouter()
 
   useEffect(() => {
@@ -92,7 +103,14 @@ export default function LoginPage() {
 
           {mode === 'login' && (
             <>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {showResetBanner && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 mb-4">
+                  <p className="text-sm font-dm-sans text-emerald-700">
+                    Contraseña actualizada. Inicia sesión con tu nueva contraseña.
+                  </p>
+                </div>
+              )}
+              <form onSubmit={(e) => { setShowResetBanner(false); handleSubmit(e) }} className="space-y-4">
                 <div>
                   <label htmlFor="email" className="block text-sm font-dm-sans font-medium text-gray-700 mb-1.5">Email</label>
                   <input

@@ -16,6 +16,7 @@ export default function OnboardingPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [alreadyCompleted, setAlreadyCompleted] = useState(false)
   const [loading, setLoading] = useState(false)
 
   function formatCode(value: string): string {
@@ -31,6 +32,7 @@ export default function OnboardingPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
+    setAlreadyCompleted(false)
 
     const result = await verifyAccessCode(code)
     setLoading(false)
@@ -40,7 +42,7 @@ export default function OnboardingPage() {
       return
     }
     if (result.error === 'already_completed') {
-      setError('Esta cuenta ya fue creada. Inicia sesión.')
+      setAlreadyCompleted(true)
       return
     }
     if (result.error) {
@@ -149,9 +151,23 @@ export default function OnboardingPage() {
                 </div>
               )}
 
+              {alreadyCompleted && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 space-y-2">
+                  <p className="text-sm font-dm-sans text-amber-800 font-medium">
+                    Ya tienes una cuenta. Inicia sesión con tu email y contraseña.
+                  </p>
+                  <p className="text-sm font-dm-sans text-amber-800">
+                    ¿Olvidaste tu contraseña?{' '}
+                    <Link href="/forgot-password" className="font-semibold text-brand-green underline hover:no-underline">
+                      Restablecer aquí →
+                    </Link>
+                  </p>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={loading || code.length < 11}
+                disabled={loading || code.length < 11 || alreadyCompleted}
                 className="w-full py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98] mt-2"
                 style={{ backgroundColor: '#1B5E3B' }}
               >

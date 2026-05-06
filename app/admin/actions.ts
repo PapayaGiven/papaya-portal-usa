@@ -189,6 +189,45 @@ export async function completeOnboarding(data: {
   return {}
 }
 
+export async function resetPasswordWithAccessCode(
+  code: string,
+  newPassword: string,
+): Promise<{ error?: string }> {
+  if (!newPassword || newPassword.length < 8) {
+    return { error: 'La contraseña debe tener al menos 8 caracteres.' }
+  }
+
+  const supabase = createAdminClient()
+  const cleaned = code.trim().toUpperCase()
+
+  const { data: creator, error: fetchErr } = await supabase
+    .from('creators')
+    .select('email, has_completed_onboarding')
+    .eq('access_code', cleaned)
+    .maybeSingle()
+
+  if (fetchErr) return { error: fetchErr.message }
+  if (!creator) return { error: 'Código no válido. Contacta a tu account manager.' }
+  if (!creator.email) return { error: 'No hay email asociado a este código. Contacta a tu account manager.' }
+  if (!creator.has_completed_onboarding) {
+    return { error: 'Esta cuenta aún no se ha creado. Usa "Primera vez aquí" en el inicio de sesión.' }
+  }
+
+  const normalizedEmail = creator.email.trim().toLowerCase()
+  const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers()
+  if (listErr) return { error: listErr.message }
+
+  const authUser = users.find((u) => u.email?.toLowerCase() === normalizedEmail)
+  if (!authUser) return { error: 'No encontramos tu cuenta de acceso. Contacta a tu account manager.' }
+
+  const { error: updateErr } = await supabase.auth.admin.updateUserById(authUser.id, {
+    password: newPassword,
+  })
+  if (updateErr) return { error: updateErr.message }
+
+  return {}
+}
+
 export async function deleteCreator(id: string): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
