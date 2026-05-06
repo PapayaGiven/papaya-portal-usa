@@ -113,17 +113,19 @@ export default function ForgotPasswordPage() {
           {mode === 'choice' && !emailSent && (
             <div className="space-y-3">
               <button
-                onClick={() => switchMode('email')}
-                className="block w-full text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                onClick={() => switchMode('code')}
+                className="block w-full py-4 px-5 rounded-xl text-left transition-all hover:opacity-90 active:scale-[0.98] text-white"
                 style={{ backgroundColor: '#1B5E3B' }}
               >
-                Restablecer con email →
+                <p className="font-dm-sans font-bold text-sm">Tengo mi código de acceso</p>
+                <p className="font-dm-sans text-xs text-white/80 mt-0.5">Restablece tu contraseña al instante con tu código ABC-123-XYZ.</p>
               </button>
               <button
-                onClick={() => switchMode('code')}
-                className="block w-full text-center py-3.5 rounded-xl font-dm-sans font-semibold text-sm text-brand-green border-2 border-brand-green hover:bg-brand-green/5 transition"
+                onClick={() => switchMode('email')}
+                className="block w-full py-4 px-5 rounded-xl text-left transition border-2 border-brand-green hover:bg-brand-green/5"
               >
-                Restablecer con código de acceso →
+                <p className="font-dm-sans font-bold text-sm text-brand-green">No tengo mi código</p>
+                <p className="font-dm-sans text-xs text-gray-500 mt-0.5">Te enviamos un email para restablecer tu contraseña.</p>
               </button>
             </div>
           )}

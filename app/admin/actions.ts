@@ -877,3 +877,226 @@ export async function updateStrategyProductCreative(
   revalidatePath('/strategy')
   return {}
 }
+
+// ── Creator-centric admin (Crecimiento / Calls / Videos) ─────────────────────
+
+export async function updateCreatorContact(
+  id: string,
+  data: { name?: string | null; email?: string | null; phone_number?: string | null },
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const payload: Record<string, string | null> = {}
+  if (data.name !== undefined) payload.name = data.name?.trim() || null
+  if (data.email !== undefined) payload.email = data.email ? data.email.trim().toLowerCase() : null
+  if (data.phone_number !== undefined) payload.phone_number = data.phone_number?.trim() || null
+  const { error } = await supabase.from('creators').update(payload).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  return {}
+}
+
+export async function upsertCreatorMonthlyStats(data: {
+  creator_id: string
+  month: string
+  gmv?: number
+  gmv_projection?: number
+  commission_rate?: number
+  videos_posted?: number
+  live_hours?: number
+  commissions_earned?: number
+  notes?: string | null
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase
+    .from('creator_monthly_stats')
+    .upsert(
+      {
+        creator_id: data.creator_id,
+        month: data.month,
+        gmv: data.gmv ?? 0,
+        gmv_projection: data.gmv_projection ?? 0,
+        commission_rate: data.commission_rate ?? 0,
+        videos_posted: data.videos_posted ?? 0,
+        live_hours: data.live_hours ?? 0,
+        commissions_earned: data.commissions_earned ?? 0,
+        notes: data.notes ?? null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'creator_id,month' },
+    )
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/mi-crecimiento')
+  return {}
+}
+
+export async function deleteCreatorMonthlyStats(id: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creator_monthly_stats').delete().eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/mi-crecimiento')
+  return {}
+}
+
+export async function addCreatorVideo(data: {
+  creator_id: string
+  product_id?: string | null
+  tiktok_url: string
+  converted?: boolean
+  gmv_generated?: number
+  notes?: string | null
+}): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creator_videos').insert({
+    creator_id: data.creator_id,
+    product_id: data.product_id || null,
+    tiktok_url: data.tiktok_url.trim(),
+    converted: data.converted ?? false,
+    gmv_generated: data.gmv_generated ?? 0,
+    notes: data.notes ?? null,
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/mi-crecimiento')
+  return {}
+}
+
+export async function updateCreatorVideo(
+  id: string,
+  data: Partial<{ converted: boolean; gmv_generated: number; product_id: string | null; tiktok_url: string; notes: string | null }>,
+): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creator_videos').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/mi-crecimiento')
+  return {}
+}
+
+export async function deleteCreatorVideo(id: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('creator_videos').delete().eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/mi-crecimiento')
+  return {}
+}
+
+export async function addCallNote(data: {
+  creator_id: string
+  note: string
+  call_date?: string
+}): Promise<{ error?: string }> {
+  const trimmed = data.note.trim()
+  if (!trimmed) return { error: 'La nota no puede estar vacía.' }
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('call_notes').insert({
+    creator_id: data.creator_id,
+    note: trimmed,
+    call_date: data.call_date ?? new Date().toISOString().split('T')[0],
+  })
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return {}
+}
+
+export async function deleteCallNote(id: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('call_notes').delete().eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  return {}
+}
+
+// ── Papaya Picks ──────────────────────────────────────────────────────────────
+
+export interface PapayaPickInput {
+  product_name: string
+  brand_name?: string | null
+  niche?: string | null
+  commission_rate?: number | null
+  product_link?: string | null
+  sample_link?: string | null
+  product_image_url?: string | null
+  units_sold_this_week?: number
+  growth_percentage?: number
+  affiliates_count?: number
+  videos_count?: number
+  why_its_a_pick?: string | null
+  example_video_url?: string | null
+  min_level?: string
+  is_active?: boolean
+  expires_at?: string | null
+}
+
+export async function addPapayaPick(data: PapayaPickInput): Promise<{ error?: string; id?: string }> {
+  if (!data.product_name?.trim()) return { error: 'Nombre del producto requerido.' }
+  const supabase = createAdminClient()
+  const { data: row, error } = await supabase.from('papaya_picks').insert({
+    ...data,
+    product_name: data.product_name.trim(),
+  }).select('id').single()
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  revalidatePath('/papaya-picks')
+  return { id: row?.id }
+}
+
+export async function updatePapayaPick(id: string, data: Partial<PapayaPickInput>): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('papaya_picks').update(data).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  revalidatePath('/papaya-picks')
+  return {}
+}
+
+export async function deletePapayaPick(id: string): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('papaya_picks').delete().eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  revalidatePath('/papaya-picks')
+  return {}
+}
+
+export async function togglePapayaPick(id: string, isActive: boolean): Promise<{ error?: string }> {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('papaya_picks').update({ is_active: isActive }).eq('id', id)
+  if (error) return { error: error.message }
+  revalidatePath('/admin')
+  revalidatePath('/dashboard')
+  revalidatePath('/papaya-picks')
+  return {}
+}
+
+export async function getCreatorAdminBundle(creatorId: string): Promise<{
+  monthlyStats?: Record<string, unknown>[]
+  videos?: Record<string, unknown>[]
+  callNotes?: Record<string, unknown>[]
+  deliverables?: Record<string, unknown>[]
+  error?: string
+}> {
+  const supabase = createAdminClient()
+  const [stats, videos, notes, deliverables] = await Promise.all([
+    supabase.from('creator_monthly_stats').select('*').eq('creator_id', creatorId).order('month', { ascending: false }),
+    supabase.from('creator_videos').select('*, product:products(id, name)').eq('creator_id', creatorId).order('created_at', { ascending: false }),
+    supabase.from('call_notes').select('*').eq('creator_id', creatorId).order('call_date', { ascending: false }),
+    supabase.from('deliverables').select('*').eq('creator_id', creatorId).order('due_date', { ascending: true, nullsFirst: false }),
+  ])
+  if (stats.error) return { error: stats.error.message }
+  if (videos.error) return { error: videos.error.message }
+  if (notes.error) return { error: notes.error.message }
+  if (deliverables.error) return { error: deliverables.error.message }
+  return {
+    monthlyStats: stats.data ?? [],
+    videos: videos.data ?? [],
+    callNotes: notes.data ?? [],
+    deliverables: deliverables.data ?? [],
+  }
+}

@@ -15,7 +15,7 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient()
 
-  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes, violationsRes, announcementsRes] = await Promise.all([
+  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes, violationsRes, announcementsRes, papayaPicksRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -73,6 +73,10 @@ export default async function AdminPage() {
       .from('announcements')
       .select('*')
       .order('created_at', { ascending: false }),
+    supabase
+      .from('papaya_picks')
+      .select('*')
+      .order('papaya_pick_score', { ascending: false }),
   ])
 
   return (
@@ -97,6 +101,8 @@ export default async function AdminPage() {
       violations={(violationsRes.data ?? []) as any}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       announcements={(announcementsRes.data ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      papayaPicks={(papayaPicksRes.data ?? []) as any}
     />
   )
 }

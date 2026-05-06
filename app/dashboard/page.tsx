@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Campaign, Product, LEVEL_CONFIG, LEVEL_BADGE_COLORS, StrategyProduct, SiteSettings, LevelConfig } from '@/lib/types'
+import { Creator, Campaign, Product, LEVEL_CONFIG, LEVEL_BADGE_COLORS, StrategyProduct, SiteSettings, LevelConfig, PapayaPick } from '@/lib/types'
 import Nav from '@/components/Nav'
 import SmartBanner from '@/components/SmartBanner'
 import GMVRing from '@/components/GMVRing'
@@ -14,7 +14,7 @@ import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
 import PersonalGoalNotes from '@/components/PersonalGoalNotes'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
-import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex } from '@/lib/levelAccess'
+import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex, canSeePapayaPicks } from '@/lib/levelAccess'
 
 function computeBanner(
   creator: Creator,
@@ -181,6 +181,18 @@ export default async function DashboardPage() {
     })
     .slice(0, 2)
 
+  // Fetch top Papaya Picks for Foundation+
+  let papayaPicksTop: PapayaPick[] = []
+  if (creator && canSeePapayaPicks(level)) {
+    const { data: picksData } = await admin
+      .from('papaya_picks')
+      .select('*')
+      .eq('is_active', true)
+      .order('papaya_pick_score', { ascending: false })
+      .limit(2)
+    papayaPicksTop = ((picksData ?? []) as PapayaPick[]).filter((p) => !p.expires_at || new Date(p.expires_at) > new Date())
+  }
+
   const banner = creator ? computeBanner(creator, campaigns, products) : null
   const levelConfig = creator ? LEVEL_CONFIG[creator.level] : null
   const personalGoal = creator?.personal_gmv_goal ?? 0
@@ -236,6 +248,62 @@ export default async function DashboardPage() {
             </div>
           )}
         </div>
+
+        {/* Papaya Picks highlight (Foundation+) */}
+        {papayaPicksTop.length > 0 && (
+          <section className="mb-6 bg-gradient-to-r from-brand-pink/15 via-white to-brand-green/10 border border-brand-pink/20 rounded-3xl p-5">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <h2 className="font-playfair text-2xl text-brand-black">🌟 Papaya Picks</h2>
+                <p className="font-dm-sans text-xs text-gray-500">Oportunidades exclusivas — alta demanda, poca competencia.</p>
+              </div>
+              <a href="/papaya-picks" className="font-dm-sans text-xs font-semibold text-brand-green hover:underline">Ver todos →</a>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {papayaPicksTop.map((p) => {
+                const score = Number(p.papaya_pick_score) || 0
+                const isHot = score > 70
+                const isGood = score >= 50 && score <= 70
+                return (
+                  <div key={p.id} className="bg-white rounded-2xl border border-brand-pink/20 p-4 flex gap-3">
+                    <div className="w-20 h-20 rounded-xl bg-brand-light-pink/40 shrink-0 overflow-hidden flex items-center justify-center text-3xl">
+                      {p.product_image_url
+                        ? // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.product_image_url} alt={p.product_name} className="w-full h-full object-cover" />
+                        : '🌟'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-playfair text-base text-brand-black leading-tight truncate">{p.product_name}</h3>
+                        {(isHot || isGood) && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isHot ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {isHot ? '🔥 Hot' : '⭐ Good'}
+                          </span>
+                        )}
+                      </div>
+                      {p.brand_name && <p className="text-xs text-gray-400">{p.brand_name}</p>}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {p.commission_rate != null && <span className="text-xs font-bold text-brand-pink">{p.commission_rate}% Comisión</span>}
+                        <span className="text-[11px] text-gray-500">📦 {p.units_sold_this_week} · 📈 +{Number(p.growth_percentage).toFixed(0)}%</span>
+                      </div>
+                      {p.why_its_a_pick && (
+                        <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2 line-clamp-2"><b>Por qué ahora:</b> {p.why_its_a_pick}</p>
+                      )}
+                      <div className="flex gap-1.5 mt-2">
+                        {p.product_link && (
+                          <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-white bg-brand-green px-2.5 py-1 rounded-lg hover:bg-brand-green/90 transition">Ver producto →</a>
+                        )}
+                        {p.sample_link && (
+                          <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-brand-green bg-brand-green/10 px-2.5 py-1 rounded-lg hover:bg-brand-green/20 transition">Solicitar muestra →</a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Smart Banner */}
         {banner && (

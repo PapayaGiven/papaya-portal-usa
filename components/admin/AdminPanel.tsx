@@ -1,14 +1,14 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Creator, Product, Campaign, CreatorLevel } from '@/lib/types'
+import { Creator, Product, Campaign, CreatorLevel, CreatorMonthlyStats, CreatorVideo, CallNote, PapayaPick, computePapayaPickScore } from '@/lib/types'
 import { createClient } from '@/lib/supabase/client'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, deleteCreator, updateCreatorEliteSettings, updateCreatorVideosOverride, regenerateAccessCode,
+  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, updateCreatorEliteSettings, regenerateAccessCode,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
@@ -17,6 +17,10 @@ import {
   updateLevelConfig,
   addDeliverable, updateDeliverableStatus, deleteDeliverable,
   addAnnouncement, updateAnnouncement, deleteAnnouncement, uploadAnnouncementImage,
+  updateCreatorContact, upsertCreatorMonthlyStats, deleteCreatorMonthlyStats,
+  addCreatorVideo, deleteCreatorVideo,
+  addCallNote, deleteCallNote, getCreatorAdminBundle,
+  addPapayaPick, updatePapayaPick, deletePapayaPick, togglePapayaPick,
 } from '@/app/admin/actions'
 
 async function uploadToStorage(bucket: string, file: File): Promise<string> {
@@ -163,6 +167,7 @@ interface AdminPanelProps {
   levelConfigs: LevelConfigRow[]
   violations: ViolationRow[]
   announcements: AnnouncementRow[]
+  papayaPicks: PapayaPick[]
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
@@ -197,440 +202,836 @@ function Feedback({ msg }: { msg: string | null }) {
 }
 
 // ── Creators Tab ──────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function CreatorsTab({ creators, products: _products }: { creators: Creator[]; products: Product[] }) {
-  const [editingGMV, setEditingGMV] = useState<{ id: string; value: string } | null>(null)
-  const [editingGoal, setEditingGoal] = useState<{ id: string; value: string } | null>(null)
-  const [editingVideos, setEditingVideos] = useState<{ id: string; value: string } | null>(null)
-  const [expandedElite, setExpandedElite] = useState<string | null>(null)
-  const [eliteForm, setEliteForm] = useState<{ whatsapp_number: string; mastermind_date: string; account_manager_name: string; account_manager_whatsapp: string; booking_link: string }>({ whatsapp_number: '', mastermind_date: '', account_manager_name: '', account_manager_whatsapp: '', booking_link: '' })
+
+const LEVELS_FOR_FILTER: ('All' | CreatorLevel)[] = ['All', 'Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
+
+function initials(name: string | null, email: string): string {
+  const src = (name ?? email).trim()
+  if (!src) return '?'
+  const parts = src.split(/\s+/)
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
+
+function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; products: Product[]; campaigns: Campaign[] }) {
+  const [search, setSearch] = useState('')
+  const [levelFilter, setLevelFilter] = useState<'All' | CreatorLevel>('All')
+  const [selectedId, setSelectedId] = useState<string | null>(creators[0]?.id ?? null)
+  const [subTab, setSubTab] = useState<'overview' | 'estrategia' | 'crecimiento' | 'todo' | 'calls'>('overview')
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [generatedCode, setGeneratedCode] = useState<{ name: string; code: string } | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
   function copyToClipboard(text: string, label: string) {
     navigator.clipboard.writeText(text).then(() => fb(`✓ ${label} copiado`))
   }
 
-  function openElite(c: Creator) {
-    setExpandedElite(c.id)
-    setEliteForm({
-      whatsapp_number: c.whatsapp_number ?? '',
-      mastermind_date: c.mastermind_date ? c.mastermind_date.slice(0, 16) : '',
-      account_manager_name: c.account_manager_name ?? '',
-      account_manager_whatsapp: c.account_manager_whatsapp ?? '',
-      booking_link: c.booking_link ?? '',
-    })
-  }
+  const filtered = creators.filter((c) => {
+    if (levelFilter !== 'All' && c.level !== levelFilter) return false
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      const hay = `${c.name ?? ''} ${c.email ?? ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
 
-  function fb(msg: string) {
-    setFeedback(msg)
-    setTimeout(() => setFeedback(null), 4000)
+  const selected = creators.find((c) => c.id === selectedId) ?? null
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-4 -m-2">
+      {/* Left panel — creator list */}
+      <aside className="w-full lg:w-[280px] shrink-0 bg-gray-50 border border-gray-100 rounded-2xl flex flex-col" style={{ maxHeight: 'calc(100vh - 180px)' }}>
+        <div className="p-3 space-y-2 border-b border-gray-100">
+          <input
+            type="search"
+            placeholder="Buscar creator…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field w-full text-sm"
+          />
+          <select
+            value={levelFilter}
+            onChange={(e) => setLevelFilter(e.target.value as 'All' | CreatorLevel)}
+            className="input-field w-full text-xs"
+          >
+            {LEVELS_FOR_FILTER.map((l) => (
+              <option key={l} value={l}>{l === 'All' ? 'Todos los niveles' : l}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+          {filtered.length === 0 && (
+            <p className="p-4 text-xs text-gray-400 text-center">Sin resultados.</p>
+          )}
+          {filtered.map((c) => {
+            const active = c.id === selectedId
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedId(c.id)}
+                className={`w-full text-left p-3 flex items-center gap-3 transition ${active ? 'bg-brand-light-pink/60' : 'hover:bg-white'}`}
+              >
+                <div className="w-9 h-9 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-xs flex items-center justify-center shrink-0">
+                  {initials(c.name, c.email)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-dm-sans text-sm font-semibold text-brand-black truncate">{c.name || '(sin nombre)'}</p>
+                  <p className="font-dm-sans text-[11px] text-gray-400 truncate">{c.phone_number || c.email}</p>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${LEVEL_COLORS[c.level]}`}>{c.level}</span>
+                    <span className="text-[10px] text-gray-500 font-dm-sans">${c.gmv.toLocaleString('en-US')}</span>
+                    {c.personal_gmv_goal > 0 && c.gmv < c.personal_gmv_goal * 0.7 && (
+                      <span title="Bajo proyección" className="text-[11px]">⚠️</span>
+                    )}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="p-3 border-t border-gray-100">
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="w-full font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition"
+          >
+            {showAdd ? 'Cancelar' : '+ Add creator'}
+          </button>
+          {showAdd && (
+            <div className="mt-3 space-y-2">
+              <input
+                type="text"
+                placeholder="Nombre"
+                value={addForm.name}
+                onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                className="input-field w-full text-sm"
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={addForm.email}
+                onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
+                className="input-field w-full text-sm"
+              />
+              <button
+                disabled={isPending || !addForm.email}
+                onClick={() => startTransition(async () => {
+                  const r = await addCreator(addForm.name, addForm.email)
+                  if (r.error) fb(`Error: ${r.error}`)
+                  else {
+                    fb('✓ Creator created!')
+                    if (r.access_code) setGeneratedCode({ name: addForm.name || addForm.email, code: r.access_code })
+                    setAddForm({ name: '', email: '' }); setShowAdd(false)
+                  }
+                })}
+                className="w-full text-xs font-semibold bg-brand-black text-white px-3 py-2 rounded-lg hover:bg-brand-black/80 transition disabled:opacity-50"
+              >
+                {isPending ? 'Creando…' : 'Crear y generar código'}
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Right panel — profile */}
+      <section className="flex-1 min-w-0">
+        {generatedCode && (
+          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-4 mb-4 flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="font-dm-sans font-bold text-sm text-emerald-800">✓ {generatedCode.name} creada — comparte el código</p>
+            </div>
+            <code className="font-mono font-bold text-base tracking-widest text-emerald-900 bg-white border border-emerald-300 rounded-lg px-3 py-1.5">
+              {generatedCode.code}
+            </code>
+            <button onClick={() => copyToClipboard(generatedCode.code, 'Código')} className="text-xs font-semibold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition">Copiar</button>
+            <button onClick={() => setGeneratedCode(null)} className="text-emerald-600/60 hover:text-emerald-800 text-lg leading-none shrink-0">×</button>
+          </div>
+        )}
+        <Feedback msg={feedback} />
+
+        {!selected && (
+          <div className="text-center py-20 text-gray-400 font-dm-sans">
+            Selecciona un creator de la lista.
+          </div>
+        )}
+
+        {selected && (
+          <>
+            <div className="bg-white border border-gray-100 rounded-2xl mb-4 p-4 flex items-center gap-4 flex-wrap">
+              <div className="w-12 h-12 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-base flex items-center justify-center shrink-0">
+                {initials(selected.name, selected.email)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="font-playfair text-2xl text-brand-black leading-tight">{selected.name || '(sin nombre)'}</h2>
+                <p className="font-dm-sans text-xs text-gray-400 truncate">{selected.email}</p>
+              </div>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${LEVEL_COLORS[selected.level]}`}>{selected.level}</span>
+              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${selected.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
+                {selected.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
+              </span>
+            </div>
+
+            <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto">
+              {([
+                ['overview', 'Overview'],
+                ['estrategia', 'Estrategia'],
+                ['crecimiento', 'Crecimiento'],
+                ['todo', 'To Do'],
+                ['calls', 'Calls'],
+              ] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setSubTab(key)}
+                  className={`px-4 py-2 font-dm-sans text-sm font-medium whitespace-nowrap border-b-2 transition ${
+                    subTab === key
+                      ? 'border-brand-green text-brand-green'
+                      : 'border-transparent text-gray-500 hover:text-brand-black'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {subTab === 'overview' && (
+              <CreatorOverview creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} copyToClipboard={copyToClipboard} />
+            )}
+            {subTab === 'estrategia' && (
+              <StrategyManager creators={creators} products={products} campaigns={campaigns} defaultCreatorId={selected.id} hideCreatorPicker />
+            )}
+            {subTab === 'crecimiento' && (
+              <CreatorCrecimiento creator={selected} products={products} startTransition={startTransition} isPending={isPending} fb={fb} />
+            )}
+            {subTab === 'todo' && (
+              <CreatorTodo creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} />
+            )}
+            {subTab === 'calls' && (
+              <CreatorCalls creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} />
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  )
+}
+
+// ── Creator Overview sub-tab ────────────────────────────────────────────────
+
+function CreatorOverview({ creator, startTransition, isPending, fb, copyToClipboard }: {
+  creator: Creator
+  startTransition: (cb: () => void) => void
+  isPending: boolean
+  fb: (msg: string) => void
+  copyToClipboard: (text: string, label: string) => void
+}) {
+  const [form, setForm] = useState({
+    name: creator.name ?? '',
+    email: creator.email ?? '',
+    phone_number: creator.phone_number ?? '',
+    level: creator.level,
+    gmv: String(creator.gmv ?? 0),
+    personal_gmv_goal: String(creator.personal_gmv_goal ?? 0),
+    is_active: creator.is_active,
+    booking_link: creator.booking_link ?? '',
+    account_manager_name: creator.account_manager_name ?? '',
+    account_manager_whatsapp: creator.account_manager_whatsapp ?? '',
+    whatsapp_number: creator.whatsapp_number ?? '',
+  })
+
+  function inputCls() {
+    return 'input-field w-full text-sm'
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Creators</h2>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition"
-        >
-          {showAdd ? 'Cancel' : '+ Add creator'}
-        </button>
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black mb-3">Código de acceso</h3>
+        <div className="flex items-center gap-2 flex-wrap">
+          {creator.access_code ? (
+            <code className="font-mono text-lg font-bold tracking-widest text-brand-black bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5">
+              {creator.access_code}
+            </code>
+          ) : (
+            <span className="text-sm text-gray-400 italic">Sin código asignado</span>
+          )}
+          {creator.access_code && (
+            <>
+              <button onClick={() => copyToClipboard(creator.access_code!, 'Código')} className="text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition">📋 Copiar</button>
+              <button
+                disabled={isPending}
+                onClick={() => {
+                  if (confirm(`¿Regenerar código de acceso para ${creator.name || creator.email}? El código anterior dejará de funcionar.`)) {
+                    startTransition(async () => {
+                      const r = await regenerateAccessCode(creator.id)
+                      if (r.error) fb(`Error: ${r.error}`)
+                      else fb(`✓ Nuevo código: ${r.access_code}`)
+                    })
+                  }
+                }}
+                className="text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
+              >↻ Regenerar</button>
+            </>
+          )}
+        </div>
       </div>
 
-      {generatedCode && (
-        <div className="bg-emerald-50 border-2 border-emerald-200 rounded-2xl p-5 mb-5">
-          <div className="flex items-start justify-between gap-3 mb-3">
-            <div>
-              <h3 className="font-dm-sans font-bold text-base text-emerald-800">✓ Creator creada — comparte este código</h3>
-              <p className="font-dm-sans text-xs text-emerald-700/70 mt-0.5">
-                {generatedCode.name} puede usar este código en /onboarding para configurar su cuenta.
-              </p>
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black">Datos de contacto</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">Nombre</label><input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={inputCls()} /></div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">Email</label><input type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputCls()} /></div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">Teléfono</label><input value={form.phone_number} onChange={(e) => setForm((f) => ({ ...f, phone_number: e.target.value }))} placeholder="+1..." className={inputCls()} /></div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">WhatsApp</label><input value={form.whatsapp_number} onChange={(e) => setForm((f) => ({ ...f, whatsapp_number: e.target.value }))} placeholder="+1..." className={inputCls()} /></div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black">Nivel y metas</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1 block">Nivel</label>
+            <select value={form.level} onChange={(e) => setForm((f) => ({ ...f, level: e.target.value as CreatorLevel }))} className={inputCls()}>
+              {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">GMV ($)</label><input type="number" value={form.gmv} onChange={(e) => setForm((f) => ({ ...f, gmv: e.target.value }))} className={inputCls()} /></div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">Personal GMV goal ($)</label><input type="number" value={form.personal_gmv_goal} onChange={(e) => setForm((f) => ({ ...f, personal_gmv_goal: e.target.value }))} className={inputCls()} /></div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} className="rounded" />
+          Activo
+        </label>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black">Account manager + booking</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">AM nombre</label><input value={form.account_manager_name} onChange={(e) => setForm((f) => ({ ...f, account_manager_name: e.target.value }))} className={inputCls()} /></div>
+          <div><label className="text-xs font-semibold text-gray-500 mb-1 block">AM WhatsApp</label><input value={form.account_manager_whatsapp} onChange={(e) => setForm((f) => ({ ...f, account_manager_whatsapp: e.target.value }))} placeholder="+1..." className={inputCls()} /></div>
+          <div className="sm:col-span-2"><label className="text-xs font-semibold text-gray-500 mb-1 block">Booking link</label><input type="url" value={form.booking_link} onChange={(e) => setForm((f) => ({ ...f, booking_link: e.target.value }))} placeholder="https://calendar..." className={inputCls()} /></div>
+        </div>
+      </div>
+
+      <button
+        disabled={isPending}
+        onClick={() => startTransition(async () => {
+          const errs: string[] = []
+          const r1 = await updateCreatorContact(creator.id, { name: form.name, email: form.email, phone_number: form.phone_number })
+          if (r1.error) errs.push(r1.error)
+          if (form.level !== creator.level) {
+            const r2 = await updateCreatorLevel(creator.id, form.level)
+            if (r2.error) errs.push(r2.error)
+          }
+          const newGmv = parseFloat(form.gmv) || 0
+          if (newGmv !== creator.gmv) {
+            const r3 = await updateCreatorGMV(creator.id, newGmv)
+            if (r3.error) errs.push(r3.error)
+          }
+          const newGoal = parseFloat(form.personal_gmv_goal) || 0
+          if (newGoal !== creator.personal_gmv_goal) {
+            const r4 = await updateCreatorPersonalGoal(creator.id, newGoal)
+            if (r4.error) errs.push(r4.error)
+          }
+          if (form.is_active !== creator.is_active) {
+            await toggleCreatorActive(creator.id, form.is_active)
+          }
+          const r5 = await updateCreatorEliteSettings(creator.id, {
+            whatsapp_number: form.whatsapp_number || null,
+            account_manager_name: form.account_manager_name || null,
+            account_manager_whatsapp: form.account_manager_whatsapp || null,
+            booking_link: form.booking_link || null,
+          })
+          if (r5.error) errs.push(r5.error)
+          if (errs.length) fb(`Error: ${errs.join(' | ')}`)
+          else fb('✓ Guardado')
+        })}
+        className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+      >
+        {isPending ? 'Guardando…' : 'Guardar cambios'}
+      </button>
+    </div>
+  )
+}
+
+// ── Creator Crecimiento sub-tab ────────────────────────────────────────────
+
+function CreatorCrecimiento({ creator, products, startTransition, isPending, fb }: {
+  creator: Creator
+  products: Product[]
+  startTransition: (cb: () => void) => void
+  isPending: boolean
+  fb: (msg: string) => void
+}) {
+  const [stats, setStats] = useState<CreatorMonthlyStats[]>([])
+  const [videos, setVideos] = useState<CreatorVideo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editingMonth, setEditingMonth] = useState<string | null>(null)
+  const [statForm, setStatForm] = useState({ month: '', gmv: '', gmv_projection: '', commission_rate: '', videos_posted: '', live_hours: '', commissions_earned: '', notes: '' })
+  const [showAddStat, setShowAddStat] = useState(false)
+  const [showAddVideo, setShowAddVideo] = useState(false)
+  const [videoForm, setVideoForm] = useState({ tiktok_url: '', product_id: '', converted: false, gmv_generated: '' })
+  const [reloadKey, setReloadKey] = useState(0)
+
+  const reload = () => setReloadKey((k) => k + 1)
+
+  useState(() => { /* init noop */ })
+
+  // Load bundle on creator change
+  if (typeof window !== 'undefined' && creator) {
+    // use effect via custom impl
+  }
+
+  // Use a real effect
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getCreatorAdminBundle(creator.id).then((r) => {
+      if (cancelled) return
+      if (r.error) { fb(`Error: ${r.error}`); setLoading(false); return }
+      setStats((r.monthlyStats ?? []) as unknown as CreatorMonthlyStats[])
+      setVideos((r.videos ?? []) as unknown as CreatorVideo[])
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [creator.id, reloadKey, fb])
+
+  // Suggested projection = avg of last 3 months gmv
+  const suggested = (() => {
+    const last3 = stats.slice(0, 3)
+    if (!last3.length) return 0
+    return Math.round(last3.reduce((s, x) => s + Number(x.gmv ?? 0), 0) / last3.length)
+  })()
+
+  function startEdit(s: CreatorMonthlyStats | null) {
+    if (s) {
+      setEditingMonth(s.month)
+      setStatForm({
+        month: s.month.slice(0, 7),
+        gmv: String(s.gmv ?? ''),
+        gmv_projection: String(s.gmv_projection ?? ''),
+        commission_rate: String(s.commission_rate ?? ''),
+        videos_posted: String(s.videos_posted ?? ''),
+        live_hours: String(s.live_hours ?? ''),
+        commissions_earned: String(s.commissions_earned ?? ''),
+        notes: s.notes ?? '',
+      })
+      setShowAddStat(true)
+    } else {
+      const now = new Date()
+      const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+      setEditingMonth(null)
+      setStatForm({ month: monthStr, gmv: '', gmv_projection: String(suggested), commission_rate: '', videos_posted: '', live_hours: '', commissions_earned: '', notes: '' })
+      setShowAddStat(true)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-dm-sans font-bold text-sm text-brand-black">Stats por mes</h3>
+          <button onClick={() => startEdit(null)} className="text-xs font-semibold bg-brand-black text-white px-3 py-1.5 rounded-lg hover:bg-brand-black/80 transition">+ Agregar mes</button>
+        </div>
+
+        {showAddStat && (
+          <div className="bg-brand-light-pink/40 border border-brand-pink/20 rounded-xl p-3 mb-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Mes</label><input type="month" value={statForm.month} onChange={(e) => setStatForm((f) => ({ ...f, month: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">GMV</label><input type="number" value={statForm.gmv} onChange={(e) => setStatForm((f) => ({ ...f, gmv: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Proyección {suggested ? `(sug. ${suggested})` : ''}</label><input type="number" value={statForm.gmv_projection} onChange={(e) => setStatForm((f) => ({ ...f, gmv_projection: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Comisión %</label><input type="number" step="0.1" value={statForm.commission_rate} onChange={(e) => setStatForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Videos</label><input type="number" value={statForm.videos_posted} onChange={(e) => setStatForm((f) => ({ ...f, videos_posted: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Horas live</label><input type="number" step="0.5" value={statForm.live_hours} onChange={(e) => setStatForm((f) => ({ ...f, live_hours: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Comisiones $</label><input type="number" value={statForm.commissions_earned} onChange={(e) => setStatForm((f) => ({ ...f, commissions_earned: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div className="col-span-2 sm:col-span-4"><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Notas</label><textarea rows={2} value={statForm.notes} onChange={(e) => setStatForm((f) => ({ ...f, notes: e.target.value }))} className="input-field w-full text-xs resize-none" /></div>
+            <div className="col-span-2 sm:col-span-4 flex gap-2">
+              <button
+                disabled={isPending || !statForm.month}
+                onClick={() => startTransition(async () => {
+                  const r = await upsertCreatorMonthlyStats({
+                    creator_id: creator.id,
+                    month: `${statForm.month}-01`,
+                    gmv: parseFloat(statForm.gmv) || 0,
+                    gmv_projection: parseFloat(statForm.gmv_projection) || 0,
+                    commission_rate: parseFloat(statForm.commission_rate) || 0,
+                    videos_posted: parseInt(statForm.videos_posted, 10) || 0,
+                    live_hours: parseFloat(statForm.live_hours) || 0,
+                    commissions_earned: parseFloat(statForm.commissions_earned) || 0,
+                    notes: statForm.notes || null,
+                  })
+                  if (r.error) fb(`Error: ${r.error}`)
+                  else { fb('✓ Mes guardado'); setShowAddStat(false); reload() }
+                })}
+                className="text-xs font-semibold bg-brand-green text-white px-3 py-1.5 rounded-lg hover:bg-brand-green/90 transition disabled:opacity-50"
+              >Guardar</button>
+              <button onClick={() => setShowAddStat(false)} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg">Cancelar</button>
+              {editingMonth && (
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!confirm('¿Eliminar este mes?')) return
+                    const target = stats.find((s) => s.month === editingMonth)
+                    if (!target) return
+                    startTransition(async () => {
+                      const r = await deleteCreatorMonthlyStats(target.id)
+                      if (r.error) fb(`Error: ${r.error}`)
+                      else { fb('✓ Mes eliminado'); setShowAddStat(false); reload() }
+                    })
+                  }}
+                  className="text-xs font-semibold text-red-500 hover:text-red-700 px-3 py-1.5 rounded-lg ml-auto"
+                >Eliminar</button>
+              )}
             </div>
-            <button onClick={() => setGeneratedCode(null)} className="text-emerald-600/60 hover:text-emerald-800 text-lg leading-none shrink-0">×</button>
           </div>
-          <div className="flex items-center gap-3">
-            <code className="font-dm-sans font-bold text-2xl tracking-widest text-emerald-900 bg-white border border-emerald-300 rounded-xl px-5 py-3">
-              {generatedCode.code}
-            </code>
-            <button
-              onClick={() => copyToClipboard(generatedCode.code, 'Código')}
-              className="font-dm-sans text-sm font-semibold bg-emerald-600 text-white px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition"
-            >
-              Copiar código
-            </button>
+        )}
+
+        {loading ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+        ) : stats.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Aún no hay stats. Agrega un mes para empezar.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-dm-sans">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['Mes', 'GMV', 'Proyección', '% met', 'Comisión %', 'Videos', 'Live h', 'Comisiones $', 'Notas', ''].map((h) => (
+                    <th key={h} className="px-2 py-2 text-left text-[10px] text-gray-500 font-semibold uppercase">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {stats.map((s) => {
+                  const proj = Number(s.gmv_projection) || 0
+                  const pct = proj > 0 ? Math.round((Number(s.gmv) / proj) * 100) : null
+                  const alert = pct != null && pct < 70
+                  return (
+                    <tr key={s.id} className="hover:bg-gray-50/50">
+                      <td className="px-2 py-2 font-semibold text-brand-black">{s.month.slice(0, 7)}</td>
+                      <td className="px-2 py-2">${Number(s.gmv).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-2 text-gray-500">${proj.toLocaleString('en-US')}</td>
+                      <td className="px-2 py-2">{pct != null ? <span className={alert ? 'text-red-600 font-semibold' : 'text-emerald-700 font-semibold'}>{pct}%{alert && ' ⚠️'}</span> : '—'}</td>
+                      <td className="px-2 py-2">{Number(s.commission_rate)}%</td>
+                      <td className="px-2 py-2">{s.videos_posted}</td>
+                      <td className="px-2 py-2">{Number(s.live_hours)}h</td>
+                      <td className="px-2 py-2">${Number(s.commissions_earned).toLocaleString('en-US')}</td>
+                      <td className="px-2 py-2 text-gray-400 max-w-[160px] truncate">{s.notes ?? '—'}</td>
+                      <td className="px-2 py-2"><button onClick={() => startEdit(s)} className="text-xs text-brand-green hover:underline">Editar</button></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
+        )}
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-dm-sans font-bold text-sm text-brand-black">Conversión de videos</h3>
+          <button onClick={() => setShowAddVideo(!showAddVideo)} className="text-xs font-semibold bg-brand-black text-white px-3 py-1.5 rounded-lg hover:bg-brand-black/80 transition">{showAddVideo ? 'Cancelar' : '+ Agregar video'}</button>
         </div>
-      )}
 
-      {showAdd && (
-        <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-5">
-          <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-3">Add new creator</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
-              type="text"
-              placeholder="Name"
-              value={addForm.name}
-              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-              className="input-field"
-            />
-            <input
-              type="email"
-              placeholder="Email"
-              value={addForm.email}
-              onChange={(e) => setAddForm((f) => ({ ...f, email: e.target.value }))}
-              className="input-field"
-            />
+        {showAddVideo && (
+          <div className="bg-brand-light-pink/40 border border-brand-pink/20 rounded-xl p-3 mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div className="sm:col-span-2"><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">TikTok URL</label><input type="url" value={videoForm.tiktok_url} onChange={(e) => setVideoForm((f) => ({ ...f, tiktok_url: e.target.value }))} placeholder="https://www.tiktok.com/..." className="input-field w-full text-xs" /></div>
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Producto</label>
+              <select value={videoForm.product_id} onChange={(e) => setVideoForm((f) => ({ ...f, product_id: e.target.value }))} className="input-field w-full text-xs">
+                <option value="">Sin producto</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">GMV generado $</label>
+              <input type="number" value={videoForm.gmv_generated} onChange={(e) => setVideoForm((f) => ({ ...f, gmv_generated: e.target.value }))} className="input-field w-full text-xs" />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-700 sm:col-span-2"><input type="checkbox" checked={videoForm.converted} onChange={(e) => setVideoForm((f) => ({ ...f, converted: e.target.checked }))} className="rounded" />Convertido</label>
+            <div className="sm:col-span-4 flex gap-2">
+              <button
+                disabled={isPending || !videoForm.tiktok_url}
+                onClick={() => startTransition(async () => {
+                  const r = await addCreatorVideo({
+                    creator_id: creator.id,
+                    product_id: videoForm.product_id || null,
+                    tiktok_url: videoForm.tiktok_url,
+                    converted: videoForm.converted,
+                    gmv_generated: parseFloat(videoForm.gmv_generated) || 0,
+                  })
+                  if (r.error) fb(`Error: ${r.error}`)
+                  else { fb('✓ Video agregado'); setVideoForm({ tiktok_url: '', product_id: '', converted: false, gmv_generated: '' }); setShowAddVideo(false); reload() }
+                })}
+                className="text-xs font-semibold bg-brand-green text-white px-3 py-1.5 rounded-lg hover:bg-brand-green/90 transition disabled:opacity-50"
+              >Guardar video</button>
+            </div>
           </div>
-          <button
-            disabled={isPending || !addForm.email}
-            onClick={() => startTransition(async () => {
-              const r = await addCreator(addForm.name, addForm.email)
-              if (r.error) fb(`Error: ${r.error}`)
-              else {
-                fb('✓ Creator created!')
-                if (r.access_code) setGeneratedCode({ name: addForm.name || addForm.email, code: r.access_code })
-                setAddForm({ name: '', email: '' }); setShowAdd(false)
-              }
-            })}
-            className="mt-3 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
-          >
-            {isPending ? 'Saving...' : 'Crear creator y generar código'}
-          </button>
-        </div>
-      )}
+        )}
 
-      <Feedback msg={feedback} />
-
-      <div className="overflow-x-auto rounded-2xl border border-gray-100">
-        <table className="w-full text-sm font-dm-sans">
-          <thead className="bg-gray-50 border-b border-gray-100">
-            <tr>
-              {['Name', 'Email', 'Access Code', 'Onboarding', 'Level', 'GMV', 'Personal Goal', 'Videos/día', 'Status', 'Actions', 'Elite'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {creators.length === 0 && (
-              <tr><td colSpan={11} className="px-4 py-8 text-center text-gray-400">No creators yet.</td></tr>
-            )}
-            {creators.map((c) => (
-              <>
-              <tr key={c.id} className="bg-white hover:bg-gray-50/50 transition-colors">
-                <td className="px-4 py-3 font-medium text-brand-black whitespace-nowrap">{c.name || '–'}</td>
-                <td className="px-4 py-3 text-gray-500">{c.email}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {c.access_code ? (
-                    <div className="flex items-center gap-1.5">
-                      <code className="font-mono text-xs font-semibold text-brand-black bg-gray-100 px-2 py-1 rounded-lg">{c.access_code}</code>
-                      <button
-                        onClick={() => copyToClipboard(c.access_code!, 'Código')}
-                        className="text-xs text-gray-500 hover:text-brand-green px-1.5 py-1 rounded hover:bg-gray-100 transition"
-                        title="Copiar"
-                      >📋</button>
+        {videos.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Aún no hay videos rastreados.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-dm-sans">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['URL', 'Producto', 'Estado', 'GMV', 'Fecha', ''].map((h) => (
+                    <th key={h} className="px-2 py-2 text-left text-[10px] text-gray-500 font-semibold uppercase">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {videos.map((v) => (
+                  <tr key={v.id} className="hover:bg-gray-50/50">
+                    <td className="px-2 py-2"><a href={v.tiktok_url} target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline truncate inline-block max-w-[220px]">{v.tiktok_url}</a></td>
+                    <td className="px-2 py-2 text-gray-500">{v.product?.name ?? '—'}</td>
+                    <td className="px-2 py-2"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.converted ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{v.converted ? 'Convertido' : 'Sin conversión'}</span></td>
+                    <td className="px-2 py-2">${Number(v.gmv_generated).toLocaleString('en-US')}</td>
+                    <td className="px-2 py-2 text-gray-400">{new Date(v.created_at).toLocaleDateString('es')}</td>
+                    <td className="px-2 py-2">
                       <button
                         disabled={isPending}
                         onClick={() => {
-                          if (confirm(`¿Regenerar código de acceso para ${c.name || c.email}? El código anterior dejará de funcionar.`)) {
-                            startTransition(async () => {
-                              const r = await regenerateAccessCode(c.id)
-                              if (r.error) fb(`Error: ${r.error}`)
-                              else fb(`✓ Nuevo código: ${r.access_code}`)
-                            })
-                          }
-                        }}
-                        className="text-xs text-amber-600 hover:text-amber-800 px-1.5 py-1 rounded hover:bg-amber-50 transition"
-                        title="Regenerar"
-                      >↻</button>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-gray-300">—</span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                    {c.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <select
-                    value={c.level}
-                    disabled={isPending}
-                    onChange={(e) => startTransition(async () => {
-                      await updateCreatorLevel(c.id, e.target.value as CreatorLevel)
-                      fb('✓ Level updated')
-                    })}
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer ${LEVEL_COLORS[c.level]}`}
-                  >
-                    {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  {editingGMV?.id === c.id ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-400">$</span>
-                      <input
-                        type="number"
-                        value={editingGMV.value}
-                        onChange={(e) => setEditingGMV({ id: c.id, value: e.target.value })}
-                        className="w-20 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-pink"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => startTransition(async () => {
-                          const r = await updateCreatorGMV(c.id, parseFloat(editingGMV.value))
-                          if (r.error) fb(`Error: ${r.error}`)
-                          else fb('✓ GMV saved')
-                          setEditingGMV(null)
-                        })}
-                        className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
-                      >✓</button>
-                      <button onClick={() => setEditingGMV(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingGMV({ id: c.id, value: String(c.gmv) })}
-                      className="font-semibold text-brand-green hover:underline"
-                    >
-                      ${c.gmv.toLocaleString('en-US')}
-                    </button>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {editingGoal?.id === c.id ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-gray-400">$</span>
-                      <input
-                        type="number"
-                        value={editingGoal.value}
-                        onChange={(e) => setEditingGoal({ id: c.id, value: e.target.value })}
-                        className="w-20 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-pink"
-                        autoFocus
-                      />
-                      <button
-                        onClick={() => startTransition(async () => {
-                          const r = await updateCreatorPersonalGoal(c.id, parseFloat(editingGoal.value) || 0)
-                          if (r.error) fb(`Error: ${r.error}`)
-                          else fb('✓ Personal goal saved')
-                          setEditingGoal(null)
-                        })}
-                        className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
-                      >✓</button>
-                      <button onClick={() => setEditingGoal(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingGoal({ id: c.id, value: String(c.personal_gmv_goal ?? 0) })}
-                      className="text-brand-black hover:underline hover:text-brand-green"
-                    >
-                      {c.personal_gmv_goal > 0 ? `$${Number(c.personal_gmv_goal).toLocaleString('en-US')}` : <span className="text-gray-400 text-xs">Set goal</span>}
-                    </button>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  {editingVideos?.id === c.id ? (
-                    <div className="flex items-center gap-1.5">
-                      <input
-                        type="number"
-                        value={editingVideos.value}
-                        onChange={(e) => setEditingVideos({ id: c.id, value: e.target.value })}
-                        className="w-16 px-2 py-1 text-sm border border-brand-pink rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-pink"
-                        autoFocus
-                        placeholder="—"
-                      />
-                      <button
-                        onClick={() => startTransition(async () => {
-                          const val = editingVideos.value ? parseInt(editingVideos.value) : null
-                          const r = await updateCreatorVideosOverride(c.id, val)
-                          if (r.error) fb(`Error: ${r.error}`)
-                          else fb('✓ Videos override saved')
-                          setEditingVideos(null)
-                        })}
-                        className="text-xs bg-brand-green text-white px-2 py-1 rounded-lg hover:bg-brand-green/90"
-                      >✓</button>
-                      <button onClick={() => setEditingVideos(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setEditingVideos({ id: c.id, value: c.custom_videos_per_day != null ? String(c.custom_videos_per_day) : '' })}
-                      className="text-brand-black hover:underline hover:text-brand-green"
-                    >
-                      {c.custom_videos_per_day != null ? c.custom_videos_per_day : <span className="text-gray-400 text-xs">Default</span>}
-                    </button>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${c.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${c.is_active ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-                    {c.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                      disabled={isPending}
-                      onClick={() => startTransition(async () => {
-                        await toggleCreatorActive(c.id, !c.is_active)
-                        fb(`✓ Creator ${c.is_active ? 'deactivated' : 'activated'}`)
-                      })}
-                      className="text-xs text-gray-500 hover:text-brand-green transition px-2 py-1 rounded-lg hover:bg-gray-100"
-                    >
-                      {c.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      disabled={isPending}
-                      onClick={() => {
-                        if (confirm(`Delete "${c.name || c.email}"? This cannot be undone.`)) {
+                          if (!confirm('¿Eliminar este video?')) return
                           startTransition(async () => {
-                            const r = await deleteCreator(c.id)
+                            const r = await deleteCreatorVideo(v.id)
                             if (r.error) fb(`Error: ${r.error}`)
-                            else fb('✓ Creator deleted')
+                            else { fb('✓ Video eliminado'); reload() }
                           })
-                        }
-                      }}
-                      className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => expandedElite === c.id ? setExpandedElite(null) : openElite(c)}
-                    className="text-xs font-semibold text-amber-600 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-full transition"
-                  >
-                    {expandedElite === c.id ? 'Close' : 'Settings'}
-                  </button>
-                </td>
-              </tr>
-              {expandedElite === c.id && (
-                <tr key={`${c.id}-elite`} className="bg-amber-50/50">
-                  <td colSpan={11} className="px-6 py-4">
-                    {/* Access code card */}
-                    <div className="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <div>
-                          <p className="font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Código de acceso</p>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {c.access_code ? (
-                              <code className="font-mono text-lg font-bold tracking-widest text-brand-black bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5">
-                                {c.access_code}
-                              </code>
-                            ) : (
-                              <span className="text-sm text-gray-400 italic">Sin código asignado</span>
-                            )}
-                            {c.access_code && (
-                              <>
-                                <button
-                                  onClick={() => copyToClipboard(c.access_code!, 'Código')}
-                                  className="font-dm-sans text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
-                                >
-                                  📋 Copiar
-                                </button>
-                                <button
-                                  disabled={isPending}
-                                  onClick={() => {
-                                    if (confirm(`¿Regenerar código de acceso para ${c.name || c.email}? El código anterior dejará de funcionar.`)) {
-                                      startTransition(async () => {
-                                        const r = await regenerateAccessCode(c.id)
-                                        if (r.error) fb(`Error: ${r.error}`)
-                                        else fb(`✓ Nuevo código: ${r.access_code}`)
-                                      })
-                                    }
-                                  }}
-                                  className="font-dm-sans text-xs font-semibold bg-amber-50 text-amber-700 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition disabled:opacity-50"
-                                >
-                                  ↻ Regenerar
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${c.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                          {c.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">WhatsApp (creator)</p>
-                        <input
-                          placeholder="+1..."
-                          value={eliteForm.whatsapp_number}
-                          onChange={(e) => setEliteForm((f) => ({ ...f, whatsapp_number: e.target.value }))}
-                          className="input-field text-xs"
-                        />
-                      </div>
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Mastermind date</p>
-                        <input
-                          type="datetime-local"
-                          value={eliteForm.mastermind_date}
-                          onChange={(e) => setEliteForm((f) => ({ ...f, mastermind_date: e.target.value }))}
-                          className="input-field text-xs"
-                        />
-                      </div>
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Account manager name</p>
-                        <input
-                          placeholder="Name"
-                          value={eliteForm.account_manager_name}
-                          onChange={(e) => setEliteForm((f) => ({ ...f, account_manager_name: e.target.value }))}
-                          className="input-field text-xs"
-                        />
-                      </div>
-                      <div>
-                        <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Manager WhatsApp</p>
-                        <input
-                          placeholder="+1..."
-                          value={eliteForm.account_manager_whatsapp}
-                          onChange={(e) => setEliteForm((f) => ({ ...f, account_manager_whatsapp: e.target.value }))}
-                          className="input-field text-xs"
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-3">
-                      <p className="font-dm-sans text-xs font-semibold text-gray-500 mb-1">Booking link (calendario personal)</p>
-                      <input
-                        placeholder="https://calendar.app.google/..."
-                        value={eliteForm.booking_link}
-                        onChange={(e) => setEliteForm((f) => ({ ...f, booking_link: e.target.value }))}
-                        className="input-field text-xs w-full sm:w-1/2"
-                      />
-                    </div>
-                    <button
-                      disabled={isPending}
-                      onClick={() => startTransition(async () => {
-                        const r = await updateCreatorEliteSettings(c.id, {
-                          whatsapp_number: eliteForm.whatsapp_number || null,
-                          mastermind_date: eliteForm.mastermind_date || null,
-                          account_manager_name: eliteForm.account_manager_name || null,
-                          account_manager_whatsapp: eliteForm.account_manager_whatsapp || null,
-                          booking_link: eliteForm.booking_link || null,
-                        })
-                        if (r.error) fb(`Error: ${r.error}`)
-                        else { fb('✓ Settings saved'); setExpandedElite(null) }
-                      })}
-                      className="font-dm-sans text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
-                    >
-                      {isPending ? 'Saving...' : 'Save settings'}
-                    </button>
-                  </td>
-                </tr>
-              )}
-              </>
-            ))}
-          </tbody>
-        </table>
+                        }}
+                        className="text-xs text-red-400 hover:text-red-600"
+                      >×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
 }
+
+// ── Creator To Do sub-tab ──────────────────────────────────────────────────
+
+function CreatorTodo({ creator, startTransition, isPending, fb }: {
+  creator: Creator
+  startTransition: (cb: () => void) => void
+  isPending: boolean
+  fb: (msg: string) => void
+}) {
+  const [items, setItems] = useState<DeliverableRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [form, setForm] = useState({ brand_name: '', deliverable_type: 'video', due_date: '', notes: '' })
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = () => setReloadKey((k) => k + 1)
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getCreatorAdminBundle(creator.id).then((r) => {
+      if (cancelled) return
+      if (r.error) { fb(`Error: ${r.error}`); setLoading(false); return }
+      setItems((r.deliverables ?? []) as unknown as DeliverableRow[])
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [creator.id, reloadKey, fb])
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-dm-sans font-bold text-sm text-brand-black">Entregas pendientes</h3>
+          <button onClick={() => setShowAdd(!showAdd)} className="text-xs font-semibold bg-brand-black text-white px-3 py-1.5 rounded-lg hover:bg-brand-black/80 transition">{showAdd ? 'Cancelar' : '+ Agregar entrega'}</button>
+        </div>
+
+        {showAdd && (
+          <div className="bg-brand-light-pink/40 border border-brand-pink/20 rounded-xl p-3 mb-3 grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Marca</label><input value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Tipo</label>
+              <select value={form.deliverable_type} onChange={(e) => setForm((f) => ({ ...f, deliverable_type: e.target.value }))} className="input-field w-full text-xs">
+                <option value="video">Video</option>
+                <option value="live">Live</option>
+                <option value="post">Post</option>
+              </select>
+            </div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Fecha entrega</label><input type="date" value={form.due_date} onChange={(e) => setForm((f) => ({ ...f, due_date: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Notas</label><input value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="input-field w-full text-xs" /></div>
+            <div className="sm:col-span-4"><button
+              disabled={isPending || !form.brand_name}
+              onClick={() => startTransition(async () => {
+                const r = await addDeliverable({ creator_id: creator.id, brand_name: form.brand_name, deliverable_type: form.deliverable_type, due_date: form.due_date || null, notes: form.notes || null })
+                if (r.error) fb(`Error: ${r.error}`)
+                else { fb('✓ Entrega creada'); setForm({ brand_name: '', deliverable_type: 'video', due_date: '', notes: '' }); setShowAdd(false); reload() }
+              })}
+              className="text-xs font-semibold bg-brand-green text-white px-3 py-1.5 rounded-lg hover:bg-brand-green/90 transition disabled:opacity-50"
+            >Guardar</button></div>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+        ) : items.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Sin entregas asignadas.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs font-dm-sans">
+              <thead className="bg-gray-50">
+                <tr>{['Marca', 'Tipo', 'Fecha', 'Estado', 'Notas', ''].map((h) => (
+                  <th key={h} className="px-2 py-2 text-left text-[10px] text-gray-500 font-semibold uppercase">{h}</th>
+                ))}</tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {items.map((d) => (
+                  <tr key={d.id}>
+                    <td className="px-2 py-2 font-semibold text-brand-black">{d.brand_name}</td>
+                    <td className="px-2 py-2 text-gray-500">{d.deliverable_type}</td>
+                    <td className="px-2 py-2 text-gray-500">{d.due_date ? new Date(d.due_date).toLocaleDateString('es') : '—'}</td>
+                    <td className="px-2 py-2">
+                      <select
+                        value={d.status}
+                        disabled={isPending}
+                        onChange={(e) => startTransition(async () => {
+                          const r = await updateDeliverableStatus(d.id, e.target.value)
+                          if (r.error) fb(`Error: ${r.error}`)
+                          else { fb('✓ Estado actualizado'); reload() }
+                        })}
+                        className="text-xs bg-gray-100 rounded-lg px-2 py-1"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="approved">Approved</option>
+                      </select>
+                    </td>
+                    <td className="px-2 py-2 text-gray-400 max-w-[200px] truncate">{d.notes ?? '—'}</td>
+                    <td className="px-2 py-2">
+                      <button
+                        disabled={isPending}
+                        onClick={() => {
+                          if (!confirm('¿Eliminar entrega?')) return
+                          startTransition(async () => { await deleteDeliverable(d.id); fb('✓ Eliminada'); reload() })
+                        }}
+                        className="text-xs text-red-400 hover:text-red-600"
+                      >×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Creator Calls sub-tab ──────────────────────────────────────────────────
+
+function CreatorCalls({ creator, startTransition, isPending, fb }: {
+  creator: Creator
+  startTransition: (cb: () => void) => void
+  isPending: boolean
+  fb: (msg: string) => void
+}) {
+  const [bookingLink, setBookingLink] = useState(creator.booking_link ?? '')
+  const [notes, setNotes] = useState<CallNote[]>([])
+  const [loading, setLoading] = useState(true)
+  const [newNote, setNewNote] = useState('')
+  const [callDate, setCallDate] = useState(new Date().toISOString().split('T')[0])
+  const [reloadKey, setReloadKey] = useState(0)
+  const reload = () => setReloadKey((k) => k + 1)
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    getCreatorAdminBundle(creator.id).then((r) => {
+      if (cancelled) return
+      if (r.error) { fb(`Error: ${r.error}`); setLoading(false); return }
+      setNotes((r.callNotes ?? []) as unknown as CallNote[])
+      setLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [creator.id, reloadKey, fb])
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black">Booking link</h3>
+        <div className="flex gap-2">
+          <input type="url" value={bookingLink} onChange={(e) => setBookingLink(e.target.value)} placeholder="https://calendar.app.google/..." className="input-field flex-1 text-sm" />
+          <button
+            disabled={isPending}
+            onClick={() => startTransition(async () => {
+              const r = await updateCreatorEliteSettings(creator.id, { booking_link: bookingLink || null })
+              if (r.error) fb(`Error: ${r.error}`)
+              else fb('✓ Booking link guardado')
+            })}
+            className="text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-lg hover:bg-brand-green/90 transition disabled:opacity-50"
+          >Guardar</button>
+        </div>
+        <p className="font-dm-sans text-xs text-gray-400">
+          Las calls por mes se configuran globalmente por nivel en la pestaña Settings.
+        </p>
+      </div>
+
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <h3 className="font-dm-sans font-bold text-sm text-brand-black">Notas de calls</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+          <input type="date" value={callDate} onChange={(e) => setCallDate(e.target.value)} className="input-field text-sm" />
+          <textarea rows={2} value={newNote} onChange={(e) => setNewNote(e.target.value)} placeholder="Nota de la call…" className="input-field text-sm sm:col-span-3 resize-none" />
+        </div>
+        <button
+          disabled={isPending || !newNote.trim()}
+          onClick={() => startTransition(async () => {
+            const r = await addCallNote({ creator_id: creator.id, note: newNote, call_date: callDate })
+            if (r.error) fb(`Error: ${r.error}`)
+            else { fb('✓ Nota guardada'); setNewNote(''); reload() }
+          })}
+          className="text-xs font-semibold bg-brand-green text-white px-4 py-2 rounded-lg hover:bg-brand-green/90 transition disabled:opacity-50"
+        >Agregar nota</button>
+
+        {loading ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+        ) : notes.length === 0 ? (
+          <p className="text-xs text-gray-400 py-4 text-center">Aún no hay notas de calls.</p>
+        ) : (
+          <ul className="space-y-2 mt-3">
+            {notes.map((n) => (
+              <li key={n.id} className="bg-gray-50 border border-gray-100 rounded-xl p-3 flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-gray-400">{new Date(n.call_date).toLocaleDateString('es')}</p>
+                  <p className="text-sm text-brand-black mt-1 whitespace-pre-line">{n.note}</p>
+                </div>
+                <button
+                  disabled={isPending}
+                  onClick={() => {
+                    if (!confirm('¿Eliminar nota?')) return
+                    startTransition(async () => {
+                      const r = await deleteCallNote(n.id)
+                      if (r.error) fb(`Error: ${r.error}`)
+                      else { fb('✓ Nota eliminada'); reload() }
+                    })
+                  }}
+                  className="text-xs text-red-400 hover:text-red-600 shrink-0"
+                >×</button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
 
 // ── Products Tab ──────────────────────────────────────────────────────────────
 function ProductsTab({ products }: { products: Product[] }) {
@@ -2873,9 +3274,221 @@ function ViolationsTab({ violations }: { violations: ViolationRow[] }) {
 }
 
 // ── Main Admin Panel ──────────────────────────────────────────────────────────
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements'
+// ── Papaya Picks Tab ──────────────────────────────────────────────────────────
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements }: AdminPanelProps) {
+const PICK_NICHES = ['Beauty', 'Fashion', 'Hair', 'Skincare', 'Fitness', 'Home', 'Other'] as const
+
+function pickScoreBadge(score: number): { label: string; className: string } {
+  if (score > 70) return { label: `🔥 Hot Pick · ${Math.round(score)}`, className: 'bg-emerald-100 text-emerald-700 border border-emerald-300' }
+  if (score >= 50) return { label: `⭐ Good Pick · ${Math.round(score)}`, className: 'bg-amber-100 text-amber-700 border border-amber-300' }
+  return { label: `${Math.round(score)}`, className: 'bg-gray-100 text-gray-600 border border-gray-200' }
+}
+
+function PapayaPicksTab({ picks }: { picks: PapayaPick[] }) {
+  const [showAdd, setShowAdd] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+  const [uploading, setUploading] = useState(false)
+  const emptyForm = {
+    product_name: '', brand_name: '', niche: 'Beauty', commission_rate: '',
+    product_link: '', sample_link: '', product_image_url: '',
+    units_sold_this_week: '', growth_percentage: '', affiliates_count: '', videos_count: '',
+    why_its_a_pick: '', example_video_url: '',
+    min_level: 'Foundation', is_active: true, expires_at: '',
+  }
+  const [form, setForm] = useState(emptyForm)
+
+  function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+
+  async function handleImage(file: File) {
+    setUploading(true)
+    try {
+      const url = await uploadToStorage('papaya-picks', file)
+      setForm((f) => ({ ...f, product_image_url: url }))
+    } catch (err) {
+      fb(`Error: ${err instanceof Error ? err.message : 'Upload failed'}`)
+    }
+    setUploading(false)
+  }
+
+  function startEdit(p: PapayaPick) {
+    setEditingId(p.id)
+    setForm({
+      product_name: p.product_name,
+      brand_name: p.brand_name ?? '',
+      niche: p.niche ?? 'Beauty',
+      commission_rate: String(p.commission_rate ?? ''),
+      product_link: p.product_link ?? '',
+      sample_link: p.sample_link ?? '',
+      product_image_url: p.product_image_url ?? '',
+      units_sold_this_week: String(p.units_sold_this_week ?? ''),
+      growth_percentage: String(p.growth_percentage ?? ''),
+      affiliates_count: String(p.affiliates_count ?? ''),
+      videos_count: String(p.videos_count ?? ''),
+      why_its_a_pick: p.why_its_a_pick ?? '',
+      example_video_url: p.example_video_url ?? '',
+      min_level: p.min_level ?? 'Foundation',
+      is_active: p.is_active,
+      expires_at: p.expires_at ? p.expires_at.slice(0, 10) : '',
+    })
+    setShowAdd(true)
+  }
+
+  function reset() {
+    setForm(emptyForm); setEditingId(null); setShowAdd(false)
+  }
+
+  const liveScore = computePapayaPickScore(
+    parseInt(form.units_sold_this_week, 10) || 0,
+    parseFloat(form.growth_percentage) || 0,
+    parseInt(form.affiliates_count, 10) || 0,
+    parseInt(form.videos_count, 10) || 0,
+  )
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black">🌟 Papaya Picks</h2>
+        <button
+          onClick={() => { if (showAdd) reset(); else setShowAdd(true) }}
+          className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-4 py-2 rounded-xl hover:bg-brand-green/90 transition"
+        >
+          {showAdd ? 'Cancelar' : '+ New Papaya Pick'}
+        </button>
+      </div>
+
+      {showAdd && (
+        <div className="bg-brand-light-pink/40 border border-brand-pink/20 rounded-2xl p-5 mb-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-dm-sans font-bold text-sm text-brand-black">{editingId ? 'Editar Papaya Pick' : 'Nuevo Papaya Pick'}</h3>
+            <span className={`text-xs font-bold px-3 py-1 rounded-full ${pickScoreBadge(liveScore).className}`}>
+              Score: {pickScoreBadge(liveScore).label}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input placeholder="Nombre del producto" value={form.product_name} onChange={(e) => setForm((f) => ({ ...f, product_name: e.target.value }))} className="input-field text-sm sm:col-span-2" />
+            <input placeholder="Marca" value={form.brand_name} onChange={(e) => setForm((f) => ({ ...f, brand_name: e.target.value }))} className="input-field text-sm" />
+            <select value={form.niche} onChange={(e) => setForm((f) => ({ ...f, niche: e.target.value }))} className="input-field text-sm">
+              {PICK_NICHES.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+            <input type="number" step="0.1" placeholder="Comisión %" value={form.commission_rate} onChange={(e) => setForm((f) => ({ ...f, commission_rate: e.target.value }))} className="input-field text-sm" />
+            <select value={form.min_level} onChange={(e) => setForm((f) => ({ ...f, min_level: e.target.value }))} className="input-field text-sm">
+              {LEVELS.filter((l) => l !== 'Initiation').map((l) => <option key={l} value={l}>{l}+</option>)}
+            </select>
+            <input placeholder="Link del producto" value={form.product_link} onChange={(e) => setForm((f) => ({ ...f, product_link: e.target.value }))} className="input-field text-sm" />
+            <input placeholder="Link para muestra" value={form.sample_link} onChange={(e) => setForm((f) => ({ ...f, sample_link: e.target.value }))} className="input-field text-sm" />
+            <div>
+              <label className="text-[10px] font-semibold text-gray-500 block mb-1">Imagen del producto</label>
+              <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { if (e.target.files?.[0]) handleImage(e.target.files[0]) }} className="input-field text-xs w-full" />
+              {form.product_image_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.product_image_url} alt="" className="w-12 h-12 object-cover rounded-lg mt-1 border border-gray-200" />
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Unidades vendidas (semana)</label><input type="number" value={form.units_sold_this_week} onChange={(e) => setForm((f) => ({ ...f, units_sold_this_week: e.target.value }))} className="input-field text-sm w-full" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5">Crecimiento %</label><input type="number" step="0.1" value={form.growth_percentage} onChange={(e) => setForm((f) => ({ ...f, growth_percentage: e.target.value }))} className="input-field text-sm w-full" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5"># afiliadas</label><input type="number" value={form.affiliates_count} onChange={(e) => setForm((f) => ({ ...f, affiliates_count: e.target.value }))} className="input-field text-sm w-full" /></div>
+            <div><label className="text-[10px] font-semibold text-gray-500 block mb-0.5"># videos en TikTok</label><input type="number" value={form.videos_count} onChange={(e) => setForm((f) => ({ ...f, videos_count: e.target.value }))} className="input-field text-sm w-full" /></div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <textarea rows={3} placeholder='¿Por qué es un pick? (ej. "Spring campaign starting, only 12 affiliates, 244 units in 3 days")' value={form.why_its_a_pick} onChange={(e) => setForm((f) => ({ ...f, why_its_a_pick: e.target.value }))} className="input-field text-sm resize-none" />
+            <div className="space-y-2">
+              <input placeholder="Video TikTok de ejemplo (opcional)" value={form.example_video_url} onChange={(e) => setForm((f) => ({ ...f, example_video_url: e.target.value }))} className="input-field text-sm w-full" />
+              <input type="date" value={form.expires_at} onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))} className="input-field text-sm w-full" />
+              <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={form.is_active} onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))} className="rounded" />Activo</label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              disabled={isPending || !form.product_name.trim() || uploading}
+              onClick={() => startTransition(async () => {
+                const payload = {
+                  product_name: form.product_name.trim(),
+                  brand_name: form.brand_name || null,
+                  niche: form.niche || null,
+                  commission_rate: form.commission_rate === '' ? null : parseFloat(form.commission_rate),
+                  product_link: form.product_link || null,
+                  sample_link: form.sample_link || null,
+                  product_image_url: form.product_image_url || null,
+                  units_sold_this_week: parseInt(form.units_sold_this_week, 10) || 0,
+                  growth_percentage: parseFloat(form.growth_percentage) || 0,
+                  affiliates_count: parseInt(form.affiliates_count, 10) || 0,
+                  videos_count: parseInt(form.videos_count, 10) || 0,
+                  why_its_a_pick: form.why_its_a_pick || null,
+                  example_video_url: form.example_video_url || null,
+                  min_level: form.min_level,
+                  is_active: form.is_active,
+                  expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+                }
+                const r = editingId ? await updatePapayaPick(editingId, payload) : await addPapayaPick(payload)
+                if (r.error) fb(`Error: ${r.error}`)
+                else { fb(editingId ? '✓ Pick actualizado' : '✓ Pick creado'); reset() }
+              })}
+              className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+            >
+              {isPending ? 'Guardando…' : (editingId ? 'Actualizar' : 'Crear pick')}
+            </button>
+            <button onClick={reset} className="text-xs font-semibold text-gray-500 hover:text-gray-700 px-3 py-2">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      <Feedback msg={feedback} />
+
+      <div className="overflow-x-auto rounded-2xl border border-gray-100">
+        <table className="w-full text-sm font-dm-sans">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>{['Producto', 'Niche', 'Score', 'Vendidas', 'Crecimiento', 'Afiliadas', 'Videos', 'Activo', ''].map((h) => (
+              <th key={h} className="px-4 py-3 text-left text-xs text-gray-500 font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
+            ))}</tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {picks.length === 0 && (<tr><td colSpan={9} className="px-4 py-8 text-center text-gray-400">Aún no hay picks.</td></tr>)}
+            {picks.map((p) => {
+              const badge = pickScoreBadge(Number(p.papaya_pick_score) || 0)
+              return (
+                <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
+                  <td className="px-4 py-3 font-medium text-brand-black">
+                    <p>{p.product_name}</p>
+                    {p.brand_name && <p className="text-xs text-gray-400">{p.brand_name}</p>}
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{p.niche ?? '—'}</td>
+                  <td className="px-4 py-3"><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badge.className}`}>{badge.label}</span></td>
+                  <td className="px-4 py-3">{p.units_sold_this_week}</td>
+                  <td className="px-4 py-3">+{Number(p.growth_percentage).toFixed(1)}%</td>
+                  <td className="px-4 py-3">{p.affiliates_count}</td>
+                  <td className="px-4 py-3">{p.videos_count}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      disabled={isPending}
+                      onClick={() => startTransition(async () => { const r = await togglePapayaPick(p.id, !p.is_active); if (r.error) fb(`Error: ${r.error}`); else fb('✓ Estado actualizado') })}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full transition ${p.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}
+                    >{p.is_active ? 'Activo' : 'Inactivo'}</button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button onClick={() => startEdit(p)} className="text-xs text-brand-green hover:underline mr-2">Editar</button>
+                    <button
+                      disabled={isPending}
+                      onClick={() => { if (!confirm(`¿Eliminar "${p.product_name}"?`)) return; startTransition(async () => { const r = await deletePapayaPick(p.id); if (r.error) fb(`Error: ${r.error}`); else fb('✓ Eliminado') }) }}
+                      className="text-xs text-red-400 hover:text-red-600"
+                    >×</button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements' | 'papaya-picks'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements, papayaPicks }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('creators')
   const [isPending, startTransition] = useTransition()
 
@@ -2892,6 +3505,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
     { id: 'rewards', label: 'Recompensas', count: rewards.length },
     { id: 'violations', label: 'Violations', count: violations.filter((v) => v.status === 'pending').length },
     { id: 'announcements', label: 'Announcements', count: announcements.filter((a) => a.is_active).length },
+    { id: 'papaya-picks', label: '🌟 Papaya Picks', count: papayaPicks.filter((p) => p.is_active).length },
     { id: 'settings', label: 'Settings' },
     { id: 'config', label: 'Configuración' },
   ]
@@ -2957,7 +3571,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-2xl p-6 shadow-sm">
-          {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} />}
+          {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} campaigns={campaigns} />}
           {activeTab === 'products' && <ProductsTab products={products} />}
           {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
           {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
@@ -2970,6 +3584,7 @@ export default function AdminPanel({ creators, products, campaigns, applications
           {activeTab === 'deliverables' && <DeliverablesTab deliverables={deliverables} creators={creators} />}
           {activeTab === 'violations' && <ViolationsTab violations={violations} />}
           {activeTab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
+          {activeTab === 'papaya-picks' && <PapayaPicksTab picks={papayaPicks} />}
           {activeTab === 'config' && <LevelConfigTab levelConfigs={levelConfigs} />}
         </div>
       </div>

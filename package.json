@@ -13,8 +13,10 @@
     "@supabase/supabase-js": "^2.99.3",
     "@types/canvas-confetti": "^1.9.0",
     "canvas-confetti": "^1.9.4",
+    "chart.js": "^4.5.1",
     "next": "14.2.35",
     "react": "^18",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^18"
   },
   "devDependencies": {

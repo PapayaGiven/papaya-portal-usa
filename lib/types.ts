@@ -23,6 +23,78 @@ export interface Creator {
   custom_videos_per_day: number | null
   access_code: string | null
   has_completed_onboarding: boolean
+  phone_number: string | null
+}
+
+export interface CreatorMonthlyStats {
+  id: string
+  creator_id: string
+  month: string
+  gmv: number
+  gmv_projection: number
+  commission_rate: number
+  videos_posted: number
+  live_hours: number
+  commissions_earned: number
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CreatorVideo {
+  id: string
+  creator_id: string
+  product_id: string | null
+  tiktok_url: string
+  converted: boolean
+  gmv_generated: number
+  month: string
+  notes: string | null
+  created_at: string
+  product?: { id: string; name: string } | null
+}
+
+export interface CallNote {
+  id: string
+  creator_id: string
+  note: string
+  call_date: string
+  created_at: string
+}
+
+export interface PapayaPick {
+  id: string
+  product_name: string
+  brand_name: string | null
+  niche: string | null
+  commission_rate: number | null
+  product_link: string | null
+  sample_link: string | null
+  product_image_url: string | null
+  units_sold_this_week: number
+  growth_percentage: number
+  affiliates_count: number
+  videos_count: number
+  papaya_pick_score: number
+  why_its_a_pick: string | null
+  example_video_url: string | null
+  min_level: CreatorLevel
+  is_active: boolean
+  expires_at: string | null
+  created_at: string
+}
+
+export function computePapayaPickScore(
+  unitsSold: number,
+  growthPct: number,
+  affiliates: number,
+  videos: number,
+): number {
+  const a = (unitsSold / 10) * 0.3
+  const b = growthPct * 0.3
+  const c = (100 - Math.min(affiliates, 100)) * 0.2
+  const d = (100 - Math.min(videos, 100)) * 0.2
+  return Math.max(0, Math.min(100, a + b + c + d))
 }
 
 export interface Product {

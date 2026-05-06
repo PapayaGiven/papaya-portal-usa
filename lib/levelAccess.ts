@@ -38,6 +38,7 @@ export function getNavLinks(level: CreatorLevel | null): { href: string; label: 
     { href: '/strategy', label: 'Mi Estrategia' },
     { href: '/products', label: 'Productos' },
     { href: '/mi-progreso', label: 'Mi Progreso' },
+    { href: '/mi-crecimiento', label: 'Mi Crecimiento' },
     { href: '/violations', label: 'Violaciones' },
   ]
 
@@ -47,8 +48,10 @@ export function getNavLinks(level: CreatorLevel | null): { href: string; label: 
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/strategy', label: 'Mi Estrategia' },
     { href: '/products', label: 'Productos' },
+    { href: '/papaya-picks', label: '🌟 Papaya Picks' },
     { href: '/campaigns', label: 'Campañas' },
     { href: '/mi-progreso', label: 'Mi Progreso' },
+    { href: '/mi-crecimiento', label: 'Mi Crecimiento' },
   ]
 
   if (level === 'Scale' || level === 'Elite') {
@@ -58,6 +61,10 @@ export function getNavLinks(level: CreatorLevel | null): { href: string; label: 
   links.push({ href: '/violations', label: 'Violaciones' })
 
   return links
+}
+
+export function canSeePapayaPicks(level: CreatorLevel): boolean {
+  return level !== 'Initiation'
 }
 
 export const LEVEL_ORDER: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']

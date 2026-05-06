@@ -96,7 +96,7 @@ function LoginPageInner() {
                 href="/forgot-password"
                 className="block w-full text-center py-3 font-dm-sans text-sm text-gray-500 hover:text-brand-green transition"
               >
-                Olvidé mi contraseña
+                Recuperar mi cuenta
               </Link>
             </div>
           )}

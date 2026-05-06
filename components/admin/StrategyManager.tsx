@@ -8,6 +8,8 @@ interface StrategyManagerProps {
   creators: Creator[]
   products: Product[]
   campaigns: Campaign[]
+  defaultCreatorId?: string
+  hideCreatorPicker?: boolean
 }
 
 const PRIORITIES = ['Hero', 'Secondary', 'Supporting'] as const
@@ -49,11 +51,11 @@ function emptyProduct(): StrategyProductForm {
   }
 }
 
-export default function StrategyManager({ creators, products, campaigns }: StrategyManagerProps) {
+export default function StrategyManager({ creators, products, campaigns, defaultCreatorId, hideCreatorPicker }: StrategyManagerProps) {
   const now = new Date()
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-  const [creatorId, setCreatorId] = useState('')
+  const [creatorId, setCreatorId] = useState(defaultCreatorId ?? '')
   const [month, setMonth] = useState(defaultMonth.slice(0, 7)) // "YYYY-MM"
   const [selectedWeek, setSelectedWeek] = useState<number>(1) // week 1-4
   const [strategyProducts, setStrategyProducts] = useState<StrategyProductForm[]>([emptyProduct()])
@@ -186,19 +188,21 @@ export default function StrategyManager({ creators, products, campaigns }: Strat
       {/* Creator + Month selector */}
       <div className="bg-brand-light-pink border border-brand-pink/20 rounded-2xl p-5 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-          <div>
-            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Creator</label>
-            <select
-              value={creatorId}
-              onChange={(e) => setCreatorId(e.target.value)}
-              className="input-field w-full"
-            >
-              <option value="">Seleccionar creadora…</option>
-              {creators.filter((c) => c.is_active).map((c) => (
-                <option key={c.id} value={c.id}>{c.name || c.email}</option>
-              ))}
-            </select>
-          </div>
+          {!hideCreatorPicker && (
+            <div>
+              <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Creator</label>
+              <select
+                value={creatorId}
+                onChange={(e) => setCreatorId(e.target.value)}
+                className="input-field w-full"
+              >
+                <option value="">Seleccionar creadora…</option>
+                {creators.filter((c) => c.is_active).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || c.email}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Mes</label>
             <input
