@@ -282,21 +282,20 @@ export default async function DashboardPage() {
                         )}
                       </div>
                       {p.brand_name && <p className="text-xs text-gray-400">{p.brand_name}</p>}
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {p.commission_rate != null && <span className="text-xs font-bold text-brand-pink">{p.commission_rate}% Comisión</span>}
-                        <span className="text-[11px] text-gray-500">📦 {p.units_sold_this_week} · 📈 +{Number(p.growth_percentage).toFixed(0)}%</span>
+                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{p.units_sold_this_week.toLocaleString('en-US')} unidades esta semana</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{Number(p.growth_percentage).toFixed(0)}% crecimiento</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-pink/20 text-brand-pink">Solo {p.affiliates_count} afiliadas</span>
                       </div>
+                      {p.commission_rate != null && (
+                        <p className="text-xs font-bold text-brand-pink mt-1.5">{p.commission_rate}% Comisión</p>
+                      )}
                       {p.why_its_a_pick && (
                         <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2 line-clamp-2"><b>Por qué ahora:</b> {p.why_its_a_pick}</p>
                       )}
-                      <div className="flex gap-1.5 mt-2">
-                        {p.product_link && (
-                          <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-white bg-brand-green px-2.5 py-1 rounded-lg hover:bg-brand-green/90 transition">Ver producto →</a>
-                        )}
-                        {p.sample_link && (
-                          <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="text-[11px] font-semibold text-brand-green bg-brand-green/10 px-2.5 py-1 rounded-lg hover:bg-brand-green/20 transition">Solicitar muestra →</a>
-                        )}
-                      </div>
+                      {p.sample_link && (
+                        <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="block text-center text-[11px] font-semibold text-white bg-brand-green px-2.5 py-1 rounded-lg hover:bg-brand-green/90 transition mt-2">Solicitar muestra →</a>
+                      )}
                     </div>
                   </div>
                 )

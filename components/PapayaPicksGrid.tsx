@@ -83,18 +83,11 @@ export default function PapayaPicksGrid({ picks }: { picks: PapayaPick[] }) {
                     🎬 Ver video de ejemplo →
                   </a>
                 )}
-                <div className="flex gap-2">
-                  {p.product_link && (
-                    <a href={p.product_link} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-2 rounded-xl font-dm-sans text-xs font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition">
-                      Ver producto →
-                    </a>
-                  )}
-                  {p.sample_link && (
-                    <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="flex-1 text-center py-2 rounded-xl font-dm-sans text-xs font-semibold text-brand-green bg-brand-green/10 hover:bg-brand-green/20 transition">
-                      Solicitar muestra →
-                    </a>
-                  )}
-                </div>
+                {p.sample_link && (
+                  <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="block text-center py-2 rounded-xl font-dm-sans text-xs font-semibold text-white bg-brand-green hover:bg-brand-green/90 transition">
+                    Solicitar muestra →
+                  </a>
+                )}
               </div>
             </article>
           )
