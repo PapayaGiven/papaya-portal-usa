@@ -15,7 +15,14 @@ export default async function AdminPage() {
 
   const supabase = createAdminClient()
 
-  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes, violationsRes, announcementsRes, papayaPicksRes] = await Promise.all([
+  // Dashboard month bounds — pull current + previous month stats for MoM.
+  const now = new Date()
+  const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+  const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+
+  const [creatorsRes, productsRes, campaignsRes, applicationsRes, productRequestsRes, initiationSelectionsRes, levelsRes, rewardsRes, creatorRewardsRes, settingsRes, deliverablesRes, levelConfigRes, violationsRes, announcementsRes, papayaPicksRes, monthlyStatsRes] = await Promise.all([
     supabase
       .from('creators')
       .select('*')
@@ -77,6 +84,12 @@ export default async function AdminPage() {
       .from('papaya_picks')
       .select('*')
       .order('papaya_pick_score', { ascending: false }),
+    // creator_monthly_stats for the two months feeding the Dashboard tab.
+    supabase
+      .from('creator_monthly_stats')
+      .select('creator_id, month, gmv, gmv_projection')
+      .gte('month', fmt(startOfPrevMonth))
+      .lt('month', fmt(startOfNextMonth)),
   ])
 
   // Surface fetch errors in the server log so future regressions don't
@@ -89,6 +102,7 @@ export default async function AdminPage() {
     ['settings', settingsRes], ['deliverables', deliverablesRes],
     ['level_config', levelConfigRes], ['violations', violationsRes],
     ['announcements', announcementsRes], ['papaya_picks', papayaPicksRes],
+    ['monthly_stats', monthlyStatsRes],
   ] as const) {
     if (res.error) console.error(`[admin] ${name} fetch error:`, res.error.message)
   }
@@ -132,6 +146,10 @@ export default async function AdminPage() {
       announcements={(announcementsRes.data ?? []) as any}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       papayaPicks={(papayaPicksRes.data ?? []) as any}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      dashboardStats={(monthlyStatsRes.data ?? []) as any}
+      currentMonthIso={fmt(startOfCurrentMonth)}
+      prevMonthIso={fmt(startOfPrevMonth)}
     />
   )
 }

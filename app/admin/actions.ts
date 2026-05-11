@@ -56,10 +56,18 @@ export async function updateCreatorLevel(id: string, level: CreatorLevel): Promi
   const supabase = createAdminClient()
   const newTarget = LEVEL_CONFIG[level].target ?? 5000
 
-  const { error } = await supabase
-    .from('creators')
-    .update({ level, gmv_target: newTarget })
-    .eq('id', id)
+  // level_updated_at lets the dashboard count "leveled up this month".
+  // Wrapped in a fallback so this still works if migration 014 isn't
+  // applied yet — Supabase rejects unknown columns with code 42703.
+  const fullPayload = { level, gmv_target: newTarget, level_updated_at: new Date().toISOString() }
+  let { error } = await supabase.from('creators').update(fullPayload).eq('id', id)
+  if (error && /level_updated_at/.test(error.message)) {
+    const retry = await supabase
+      .from('creators')
+      .update({ level, gmv_target: newTarget })
+      .eq('id', id)
+    error = retry.error ?? null
+  }
 
   if (error) return { error: error.message }
   revalidatePath('/admin')

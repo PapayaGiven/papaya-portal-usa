@@ -152,6 +152,13 @@ interface LevelConfigRow {
   has_mastermind: boolean
 }
 
+interface DashboardStatRow {
+  creator_id: string
+  month: string
+  gmv: number | null
+  gmv_projection: number | null
+}
+
 interface AdminPanelProps {
   creators: Creator[]
   products: Product[]
@@ -168,6 +175,9 @@ interface AdminPanelProps {
   violations: ViolationRow[]
   announcements: AnnouncementRow[]
   papayaPicks: PapayaPick[]
+  dashboardStats: DashboardStatRow[]
+  currentMonthIso: string
+  prevMonthIso: string
 }
 
 const LEVELS: CreatorLevel[] = ['Initiation', 'Foundation', 'Growth', 'Scale', 'Elite']
@@ -223,6 +233,14 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
   const [generatedCode, setGeneratedCode] = useState<{ name: string; code: string } | null>(null)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  // Quick-change level popover anchored to the row badge. null = closed.
+  const [levelPopoverId, setLevelPopoverId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!levelPopoverId) return
+    function onDoc() { setLevelPopoverId(null) }
+    document.addEventListener('click', onDoc)
+    return () => document.removeEventListener('click', onDoc)
+  }, [levelPopoverId])
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
   function copyToClipboard(text: string, label: string) {
@@ -270,11 +288,19 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
           )}
           {filtered.map((c) => {
             const active = c.id === selectedId
+            const popoverOpen = levelPopoverId === c.id
+            // Row is a div (not a button) so the inner level pill can be a
+            // real <button> without nesting interactive elements.
             return (
-              <button
+              <div
                 key={c.id}
                 onClick={() => setSelectedId(c.id)}
-                className={`w-full text-left p-3 flex items-center gap-3 transition ${active ? 'bg-brand-light-pink/60' : 'hover:bg-white'}`}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(c.id) }
+                }}
+                className={`w-full text-left p-3 flex items-center gap-3 transition cursor-pointer ${active ? 'bg-brand-light-pink/60' : 'hover:bg-white'}`}
               >
                 <div className="w-9 h-9 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-xs flex items-center justify-center shrink-0">
                   {initials(c.name, c.email)}
@@ -283,14 +309,47 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
                   <p className="font-dm-sans text-sm font-semibold text-brand-black truncate">{c.name || '(sin nombre)'}</p>
                   <p className="font-dm-sans text-[11px] text-gray-400 truncate">{c.phone_number || c.email}</p>
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${LEVEL_COLORS[c.level]}`}>{c.level}</span>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setLevelPopoverId(popoverOpen ? null : c.id) }}
+                        title="Cambiar nivel"
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full hover:ring-2 hover:ring-brand-green/30 transition ${LEVEL_COLORS[c.level]}`}
+                      >{c.level} ▾</button>
+                      {popoverOpen && (
+                        <div
+                          className="absolute z-30 mt-1 left-0 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[140px]"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {LEVELS.map((l) => (
+                            <button
+                              key={l}
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setLevelPopoverId(null)
+                                if (l === c.level) return
+                                startTransition(async () => {
+                                  const r = await updateCreatorLevel(c.id, l)
+                                  if (r.error) fb(`Error: ${r.error}`)
+                                  else fb('✓ Nivel actualizado')
+                                })
+                              }}
+                              className={`block w-full text-left px-3 py-1.5 text-xs font-dm-sans hover:bg-gray-50 ${l === c.level ? 'font-bold text-brand-green' : 'text-brand-black'}`}
+                            >
+                              {l === c.level && '✓ '}{l}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <span className="text-[10px] text-gray-500 font-dm-sans">${c.gmv.toLocaleString('en-US')}</span>
                     {c.personal_gmv_goal > 0 && c.gmv < c.personal_gmv_goal * 0.7 && (
                       <span title="Bajo proyección" className="text-[11px]">⚠️</span>
                     )}
                   </div>
                 </div>
-              </button>
+              </div>
             )
           })}
         </div>
@@ -371,8 +430,19 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
                 <p className="font-dm-sans text-xs text-gray-400 truncate">{selected.email}</p>
               </div>
               <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${LEVEL_COLORS[selected.level]}`}>{selected.level}</span>
-              <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${selected.has_completed_onboarding ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>
-                {selected.has_completed_onboarding ? '✓ Onboarding completado' : '⏳ Pendiente'}
+              <span
+                title={
+                  selected.has_completed_onboarding
+                    ? 'Esta creadora ya configuró su cuenta.'
+                    : 'Esta creadora aún no ha configurado su cuenta. Comparte su código de acceso.'
+                }
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                  selected.has_completed_onboarding
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                }`}
+              >
+                {selected.has_completed_onboarding ? '✓ Onboarding completado' : '⚠️ Sin cuenta'}
               </span>
             </div>
 
@@ -449,6 +519,28 @@ function CreatorOverview({ creator, startTransition, isPending, fb, copyToClipbo
 
   return (
     <div className="space-y-4">
+      {!creator.has_completed_onboarding && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+          <span className="text-2xl shrink-0" aria-hidden>⚠️</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-dm-sans font-bold text-sm text-amber-900">
+              Esta creadora no ha configurado su cuenta aún.
+            </p>
+            <p className="font-dm-sans text-xs text-amber-800/80 mt-0.5">
+              {creator.access_code
+                ? <>Su código de acceso es: <code className="font-mono font-bold tracking-widest text-amber-900 bg-white border border-amber-300 rounded px-1.5 py-0.5 ml-1">{creator.access_code}</code></>
+                : 'No tiene código aún — genera uno desde la sección de abajo.'}
+            </p>
+          </div>
+          {creator.access_code && (
+            <button
+              onClick={() => copyToClipboard(creator.access_code!, 'Código')}
+              className="text-xs font-semibold bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700 transition shrink-0"
+            >📋 Copiar</button>
+          )}
+        </div>
+      )}
+
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
         <h3 className="font-dm-sans font-bold text-sm text-brand-black mb-3">Código de acceso</h3>
         <div className="flex items-center gap-2 flex-wrap">
@@ -495,9 +587,31 @@ function CreatorOverview({ creator, startTransition, isPending, fb, copyToClipbo
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1 block">Nivel</label>
-            <select value={form.level} onChange={(e) => setForm((f) => ({ ...f, level: e.target.value as CreatorLevel }))} className={inputCls()}>
-              {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${LEVEL_COLORS[form.level]}`}>{form.level}</span>
+              <select
+                value={form.level}
+                onChange={(e) => {
+                  const newLevel = e.target.value as CreatorLevel
+                  // Optimistically update local form so the badge flips
+                  // before the request resolves; revert on error.
+                  setForm((f) => ({ ...f, level: newLevel }))
+                  startTransition(async () => {
+                    const r = await updateCreatorLevel(creator.id, newLevel)
+                    if (r.error) {
+                      setForm((f) => ({ ...f, level: creator.level }))
+                      fb(`Error: ${r.error}`)
+                    } else {
+                      fb('✓ Nivel actualizado')
+                    }
+                  })
+                }}
+                className={inputCls()}
+              >
+                {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">El nivel es controlado por admin — no se ajusta automáticamente por GMV.</p>
           </div>
           <div><label className="text-xs font-semibold text-gray-500 mb-1 block">GMV ($)</label><input type="number" value={form.gmv} onChange={(e) => setForm((f) => ({ ...f, gmv: e.target.value }))} className={inputCls()} /></div>
           <div><label className="text-xs font-semibold text-gray-500 mb-1 block">Personal GMV goal ($)</label><input type="number" value={form.personal_gmv_goal} onChange={(e) => setForm((f) => ({ ...f, personal_gmv_goal: e.target.value }))} className={inputCls()} /></div>
@@ -523,10 +637,10 @@ function CreatorOverview({ creator, startTransition, isPending, fb, copyToClipbo
           const errs: string[] = []
           const r1 = await updateCreatorContact(creator.id, { name: form.name, email: form.email, phone_number: form.phone_number })
           if (r1.error) errs.push(r1.error)
-          if (form.level !== creator.level) {
-            const r2 = await updateCreatorLevel(creator.id, form.level)
-            if (r2.error) errs.push(r2.error)
-          }
+          // Level no longer travels through the bulk save: changing the
+          // dropdown above persists immediately so the badge update feels
+          // instant and we can't get into a "saved everything except level"
+          // half-state if a different field fails.
           const newGmv = parseFloat(form.gmv) || 0
           if (newGmv !== creator.gmv) {
             const r3 = await updateCreatorGMV(creator.id, newGmv)
@@ -3486,13 +3600,300 @@ function PapayaPicksTab({ picks }: { picks: PapayaPick[] }) {
   )
 }
 
-type Tab = 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements' | 'papaya-picks'
+// ── Admin Dashboard Tab ────────────────────────────────────────────────────
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements, papayaPicks }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('creators')
+function AdminDashboardTab({
+  creators,
+  stats,
+  currentMonthIso,
+  prevMonthIso,
+}: {
+  creators: Creator[]
+  stats: DashboardStatRow[]
+  currentMonthIso: string
+  prevMonthIso: string
+}) {
+  const active = creators.filter((c) => c.is_active)
+  const totalActive = active.length
+
+  // "Current GMV" comes off the creators table (admin maintains it inline).
+  // creator_monthly_stats backs the MoM card and projection fallbacks.
+  const totalGmvThisMonth = active.reduce((s, c) => s + (Number(c.gmv) || 0), 0)
+  const avgGmv = totalActive > 0 ? totalGmvThisMonth / totalActive : 0
+
+  // Projection per creator: prefer personal_gmv_goal; fall back to the
+  // current-month stat row's gmv_projection if no personal goal is set.
+  const statByCreatorThis = new Map<string, DashboardStatRow>()
+  const statByCreatorPrev = new Map<string, DashboardStatRow>()
+  for (const s of stats) {
+    if (s.month === currentMonthIso) statByCreatorThis.set(s.creator_id, s)
+    else if (s.month === prevMonthIso) statByCreatorPrev.set(s.creator_id, s)
+  }
+  function projectionFor(c: Creator): number {
+    if (c.personal_gmv_goal && c.personal_gmv_goal > 0) return c.personal_gmv_goal
+    const s = statByCreatorThis.get(c.id)
+    return Number(s?.gmv_projection ?? 0) || 0
+  }
+
+  const belowProjection = active.filter((c) => {
+    const proj = projectionFor(c)
+    return proj > 0 && c.gmv < proj * 0.7
+  })
+
+  // Level distribution
+  const distribution = LEVELS.map((l) => {
+    const count = active.filter((c) => c.level === l).length
+    const pct = totalActive > 0 ? Math.round((count / totalActive) * 100) : 0
+    return { level: l, count, pct }
+  })
+
+  // Top 5 by current GMV
+  const top5 = [...active].sort((a, b) => b.gmv - a.gmv).slice(0, 5)
+
+  // Attention list: below 70%, biggest absolute gap first
+  const attention = [...active]
+    .map((c) => {
+      const proj = projectionFor(c)
+      const gap = proj - c.gmv
+      const pct = proj > 0 ? Math.round((c.gmv / proj) * 100) : 0
+      return { creator: c, proj, gap, pct }
+    })
+    .filter((r) => r.proj > 0 && r.creator.gmv < r.proj * 0.7)
+    .sort((a, b) => b.gap - a.gap)
+
+  // MoM total: current = sum of creators.gmv; previous = sum of last
+  // month's stat rows. Using stats for "previous" because creators.gmv is
+  // only the live snapshot.
+  const prevMonthTotal = Array.from(statByCreatorPrev.values())
+    .reduce((s, r) => s + (Number(r.gmv) || 0), 0)
+  const momDelta = totalGmvThisMonth - prevMonthTotal
+  const momPct = prevMonthTotal > 0
+    ? Math.round((momDelta / prevMonthTotal) * 100)
+    : (totalGmvThisMonth > 0 ? 100 : 0)
+
+  // Level-ups this month (best-effort: requires migration 014).
+  const startOfMonth = new Date(currentMonthIso + 'T00:00:00').getTime()
+  const leveledUpThisMonth = creators.filter((c) => {
+    if (!c.level_updated_at) return false
+    return new Date(c.level_updated_at).getTime() >= startOfMonth
+  }).length
+
+  // Days remaining in current month (for the attention list footer).
+  const today = new Date()
+  const eom = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+  const daysLeft = Math.max(0, Math.ceil((eom.getTime() - today.getTime()) / 86400000))
+
+  // Onboarding
+  const onboardingCompleted = creators.filter((c) => c.has_completed_onboarding).length
+  const onboardingPending = creators.filter((c) => !c.has_completed_onboarding)
+
+  const currency = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
+
+  return (
+    <div className="space-y-6">
+      {/* Top stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="Creators activos" value={String(totalActive)} accent="brand-green" />
+        <StatCard label="GMV este mes" value={currency(totalGmvThisMonth)} accent="brand-black" />
+        <StatCard label="GMV promedio" value={currency(avgGmv)} accent="brand-pink" />
+        <StatCard label="Bajo proyección" value={String(belowProjection.length)} accent="red" hint="GMV < 70% de meta" />
+      </div>
+
+      {/* Level distribution */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <h3 className="font-playfair text-xl text-brand-black mb-3">Distribución por nivel</h3>
+        <div className="space-y-2">
+          {distribution.map(({ level, count, pct }) => (
+            <div key={level} className="flex items-center gap-3">
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full w-24 text-center ${LEVEL_COLORS[level]}`}>{level}</span>
+              <div className="flex-1 bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full bg-brand-green/80"
+                  style={{ width: `${Math.max(pct, count > 0 ? 4 : 0)}%` }}
+                />
+              </div>
+              <span className="font-dm-sans text-xs font-semibold text-brand-black w-24 text-right">
+                {count} <span className="text-gray-400">({pct}%)</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Top 5 + MoM growth */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white border border-gray-100 rounded-2xl p-5">
+          <h3 className="font-playfair text-xl text-brand-black mb-3">Top 5 por GMV</h3>
+          {top5.length === 0 ? (
+            <p className="text-sm text-gray-400">Sin creadoras activas.</p>
+          ) : (
+            <ol className="space-y-2">
+              {top5.map((c, idx) => {
+                const proj = projectionFor(c)
+                const pct = proj > 0 ? Math.round((c.gmv / proj) * 100) : null
+                const pctTone = pct == null
+                  ? 'text-gray-400'
+                  : pct >= 100 ? 'text-emerald-600' : 'text-red-600'
+                return (
+                  <li key={c.id} className="flex items-center gap-3 p-2 rounded-xl hover:bg-gray-50">
+                    <span className="font-playfair text-lg text-gray-400 w-6 text-center">{idx + 1}</span>
+                    <div className="w-9 h-9 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-xs flex items-center justify-center shrink-0">
+                      {initials(c.name, c.email)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-dm-sans text-sm font-semibold text-brand-black truncate">{c.name || c.email}</p>
+                      <p className="font-dm-sans text-xs text-gray-400">{currency(c.gmv)}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${LEVEL_COLORS[c.level]}`}>{c.level}</span>
+                    {pct != null && (
+                      <span className={`font-dm-sans text-xs font-bold ${pctTone}`}>{pct}%</span>
+                    )}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
+          <div>
+            <h3 className="font-playfair text-xl text-brand-black mb-3">Crecimiento mes a mes</h3>
+            <div className="flex items-end gap-3">
+              <div>
+                <p className="font-dm-sans text-xs text-gray-400">Este mes</p>
+                <p className="font-playfair text-2xl text-brand-black">{currency(totalGmvThisMonth)}</p>
+              </div>
+              <div>
+                <p className="font-dm-sans text-xs text-gray-400">Mes anterior</p>
+                <p className="font-dm-sans text-base text-gray-600">{currency(prevMonthTotal)}</p>
+              </div>
+              <div className="ml-auto">
+                <span className={`inline-flex items-center gap-1 font-dm-sans text-sm font-bold ${momDelta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                  {momDelta >= 0 ? '▲' : '▼'} {momPct >= 0 ? '+' : ''}{momPct}%
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="pt-3 border-t border-gray-100">
+            <p className="font-dm-sans text-xs text-gray-400 mb-1">Subieron de nivel este mes</p>
+            <p className="font-playfair text-2xl text-brand-black">
+              {leveledUpThisMonth}
+              {leveledUpThisMonth === 0 && (
+                <span className="font-dm-sans text-xs text-gray-400 ml-2 align-middle">— se cuentan desde que se aplique migración 014</span>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Needs attention */}
+      <div className="bg-red-50/40 border border-red-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="font-playfair text-xl text-brand-black">⚠️ Necesitan atención</h3>
+          <p className="font-dm-sans text-xs text-gray-500">
+            Quedan <strong className="text-brand-black">{daysLeft}</strong> días del mes
+          </p>
+        </div>
+        {attention.length === 0 ? (
+          <p className="font-dm-sans text-sm text-gray-500">Todas las creadoras están al menos al 70% de su proyección. 🎉</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm font-dm-sans">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-gray-500">
+                  <th className="py-2 pr-3">Creator</th>
+                  <th className="py-2 pr-3">Nivel</th>
+                  <th className="py-2 pr-3">GMV actual</th>
+                  <th className="py-2 pr-3">Proyección</th>
+                  <th className="py-2 pr-3">% de meta</th>
+                  <th className="py-2 pr-3">Gap</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-red-100">
+                {attention.map(({ creator, proj, gap, pct }) => (
+                  <tr key={creator.id} className="text-brand-black">
+                    <td className="py-2 pr-3 font-semibold">{creator.name || creator.email}</td>
+                    <td className="py-2 pr-3"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${LEVEL_COLORS[creator.level]}`}>{creator.level}</span></td>
+                    <td className="py-2 pr-3">{currency(creator.gmv)}</td>
+                    <td className="py-2 pr-3 text-gray-500">{currency(proj)}</td>
+                    <td className="py-2 pr-3 text-red-600 font-semibold">{pct}%</td>
+                    <td className="py-2 pr-3 text-red-600">−{currency(gap)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Onboarding */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-5">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h3 className="font-playfair text-xl text-brand-black">Estado de onboarding</h3>
+          <p className="font-dm-sans text-xs text-gray-500">
+            <span className="text-emerald-600 font-semibold">{onboardingCompleted}</span> completas ·{' '}
+            <span className="text-amber-700 font-semibold">{onboardingPending.length}</span> sin cuenta
+          </p>
+        </div>
+        {onboardingPending.length === 0 ? (
+          <p className="font-dm-sans text-sm text-gray-500">Todas las creadoras han configurado su cuenta. 🎉</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {onboardingPending.map((c) => (
+              <li key={c.id} className="py-2 flex items-center gap-3 flex-wrap">
+                <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-dm-sans font-bold text-[11px] flex items-center justify-center shrink-0">
+                  {initials(c.name, c.email)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-dm-sans text-sm font-semibold text-brand-black truncate">{c.name || '(sin nombre)'}</p>
+                  <p className="font-dm-sans text-[11px] text-gray-400 truncate">{c.email}</p>
+                </div>
+                {c.access_code ? (
+                  <code className="font-mono text-xs font-bold tracking-widest text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                    {c.access_code}
+                  </code>
+                ) : (
+                  <span className="font-dm-sans text-xs italic text-gray-400">Sin código</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value, accent, hint }: { label: string; value: string; accent: 'brand-green' | 'brand-black' | 'brand-pink' | 'red'; hint?: string }) {
+  const ring = {
+    'brand-green': 'border-brand-green/30',
+    'brand-black': 'border-brand-black/15',
+    'brand-pink': 'border-brand-pink/40',
+    'red': 'border-red-200',
+  }[accent]
+  const text = {
+    'brand-green': 'text-brand-green',
+    'brand-black': 'text-brand-black',
+    'brand-pink': 'text-brand-black',
+    'red': 'text-red-600',
+  }[accent]
+  return (
+    <div className={`bg-white border ${ring} rounded-2xl p-4`}>
+      <p className="font-dm-sans text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`font-playfair text-2xl ${text} mt-1`}>{value}</p>
+      {hint && <p className="font-dm-sans text-[11px] text-gray-400 mt-1">{hint}</p>}
+    </div>
+  )
+}
+
+type Tab = 'dashboard' | 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements' | 'papaya-picks'
+
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements, papayaPicks, dashboardStats, currentMonthIso, prevMonthIso }: AdminPanelProps) {
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isPending, startTransition] = useTransition()
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
+    { id: 'dashboard', label: '📊 Dashboard' },
     { id: 'creators', label: 'Creators', count: creators.length },
     { id: 'applications', label: 'Applications', count: applications.length },
     { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
@@ -3571,6 +3972,14 @@ export default function AdminPanel({ creators, products, campaigns, applications
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white rounded-2xl p-6 shadow-sm">
+          {activeTab === 'dashboard' && (
+            <AdminDashboardTab
+              creators={creators}
+              stats={dashboardStats}
+              currentMonthIso={currentMonthIso}
+              prevMonthIso={prevMonthIso}
+            />
+          )}
           {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} campaigns={campaigns} />}
           {activeTab === 'products' && <ProductsTab products={products} />}
           {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}

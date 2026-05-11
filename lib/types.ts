@@ -24,6 +24,9 @@ export interface Creator {
   access_code: string | null
   has_completed_onboarding: boolean
   phone_number: string | null
+  // Stamped by updateCreatorLevel. Nullable so existing rows pre-migration
+  // 014 don't fail typed reads — dashboard treats null as "never changed".
+  level_updated_at?: string | null
 }
 
 export interface CreatorMonthlyStats {
