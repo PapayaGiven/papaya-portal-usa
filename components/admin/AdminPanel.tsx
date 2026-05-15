@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import StrategyManager from '@/components/admin/StrategyManager'
 import {
   adminLogout,
-  addCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, updateCreatorEliteSettings, regenerateAccessCode,
+  addCreator, deleteCreator, updateCreatorGMV, updateCreatorLevel, updateCreatorPersonalGoal, toggleCreatorActive, updateCreatorEliteSettings, regenerateAccessCode,
   addProduct, updateProduct, deleteProduct, toggleProductExclusive, toggleProductInitiation,
   addCampaign, updateCampaign, updateCampaignSpots, toggleCampaignStatus, deleteCampaign,
   updateProductRequestStatus,
@@ -223,11 +223,18 @@ function initials(name: string | null, email: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase()
 }
 
-function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; products: Product[]; campaigns: Campaign[] }) {
+function CreatorsTab({ creators, products, campaigns, creatorRewards, productRequests, violations }: {
+  creators: Creator[]
+  products: Product[]
+  campaigns: Campaign[]
+  creatorRewards: CreatorRewardRow[]
+  productRequests: ProductRequestRow[]
+  violations: ViolationRow[]
+}) {
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState<'All' | CreatorLevel>('All')
   const [selectedId, setSelectedId] = useState<string | null>(creators[0]?.id ?? null)
-  const [subTab, setSubTab] = useState<'overview' | 'estrategia' | 'crecimiento' | 'todo' | 'calls'>('overview')
+  const [subTab, setSubTab] = useState<'overview' | 'estrategia' | 'crecimiento' | 'todo' | 'calls' | 'recompensas' | 'solicitudes' | 'violations'>('overview')
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [generatedCode, setGeneratedCode] = useState<{ name: string; code: string } | null>(null)
@@ -453,6 +460,9 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
                 ['crecimiento', 'Crecimiento'],
                 ['todo', 'To Do'],
                 ['calls', 'Calls'],
+                ['recompensas', 'Recompensas'],
+                ['solicitudes', 'Solicitudes'],
+                ['violations', 'Violations'],
               ] as const).map(([key, label]) => (
                 <button
                   key={key}
@@ -483,9 +493,139 @@ function CreatorsTab({ creators, products, campaigns }: { creators: Creator[]; p
             {subTab === 'calls' && (
               <CreatorCalls creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} />
             )}
+            {subTab === 'recompensas' && (
+              <CreatorRewardsView creatorId={selected.id} creatorRewards={creatorRewards} />
+            )}
+            {subTab === 'solicitudes' && (
+              <CreatorRequestsView creatorId={selected.id} productRequests={productRequests} />
+            )}
+            {subTab === 'violations' && (
+              <CreatorViolationsView creatorId={selected.id} violations={violations} />
+            )}
           </>
         )}
       </section>
+    </div>
+  )
+}
+
+// ── Creator Recompensas / Solicitudes / Violations sub-tabs ─────────────────
+//
+// Each filters the global prop arrays down to the selected creator so we
+// keep the same source of truth as the old top-level tabs. Status updates
+// still call the same server actions (updateProductRequestStatus, etc.).
+
+function CreatorRewardsView({ creatorId, creatorRewards }: { creatorId: string; creatorRewards: CreatorRewardRow[] }) {
+  const mine = creatorRewards.filter((r) => r.creator_id === creatorId)
+  const [isPending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const fb = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+  if (mine.length === 0) {
+    return <p className="font-dm-sans text-sm text-gray-400 py-8 text-center">Esta creadora aún no ha reclamado recompensas.</p>
+  }
+  return (
+    <div className="space-y-3">
+      <Feedback msg={feedback} />
+      {mine.map((r) => {
+        const received = !!r.received_at || r.admin_confirmed
+        return (
+          <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="font-dm-sans text-sm font-semibold text-brand-black">{r.reward?.title ?? '—'}</p>
+              <p className="font-dm-sans text-xs text-gray-400">
+                {r.reward?.level_name ?? ''} · {r.claimed_at ? new Date(r.claimed_at).toLocaleDateString('es') : ''}
+                {received && ' · ✓ recibido'}
+              </p>
+              {r.shipping_address && (
+                <p className="font-dm-sans text-xs text-gray-500 mt-1">📦 {r.shipping_address}</p>
+              )}
+            </div>
+            {!received && (
+              <button
+                disabled={isPending}
+                onClick={() => startTransition(async () => {
+                  // confirmRewardReceived returns void; surface success/no-op
+                  // via the toast instead.
+                  await confirmRewardReceived(r.id, true)
+                  fb('✓ Marcado como recibido')
+                })}
+                className="font-dm-sans text-xs font-semibold text-white bg-brand-green hover:bg-brand-green/90 px-3 py-1.5 rounded-lg disabled:opacity-50"
+              >Marcar recibido</button>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function CreatorRequestsView({ creatorId, productRequests }: { creatorId: string; productRequests: ProductRequestRow[] }) {
+  // ProductRequestRow doesn't carry creator_id on its TypeScript shape, but
+  // the underlying row does (the join column is there). Cast to read it.
+  const filtered = productRequests.filter((r) => (r as unknown as { creator_id?: string }).creator_id === creatorId)
+  const [isPending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<string | null>(null)
+  const fb = (msg: string) => { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
+  if (filtered.length === 0) {
+    return <p className="font-dm-sans text-sm text-gray-400 py-8 text-center">Esta creadora no ha enviado solicitudes de producto.</p>
+  }
+  return (
+    <div className="space-y-3">
+      <Feedback msg={feedback} />
+      {filtered.map((r) => (
+        <div key={r.id} className="bg-white border border-gray-100 rounded-2xl p-4 flex items-center gap-3 flex-wrap">
+          <div className="flex-1 min-w-0">
+            <p className="font-dm-sans text-sm font-semibold text-brand-black">{r.product_name} <span className="text-gray-400 font-normal">· {r.brand_name}</span></p>
+            <p className="font-dm-sans text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString('es')}</p>
+            {r.reason && <p className="font-dm-sans text-xs text-gray-600 mt-1">💬 {r.reason}</p>}
+            {r.contact_info && <p className="font-dm-sans text-xs text-gray-500 mt-1">📬 {r.contact_info}</p>}
+          </div>
+          <select
+            value={r.status}
+            disabled={isPending}
+            onChange={(e) => {
+              const next = e.target.value
+              startTransition(async () => {
+                await updateProductRequestStatus(r.id, next)
+                fb(`✓ Estado: ${next}`)
+              })
+            }}
+            className="input-field text-xs"
+          >
+            <option value="pending">pending</option>
+            <option value="contacted">contacted</option>
+            <option value="done">done</option>
+          </select>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function CreatorViolationsView({ creatorId, violations }: { creatorId: string; violations: ViolationRow[] }) {
+  const mine = violations.filter((v) => v.creator_id === creatorId)
+  if (mine.length === 0) {
+    return <p className="font-dm-sans text-sm text-gray-400 py-8 text-center">Esta creadora no ha reportado violaciones.</p>
+  }
+  return (
+    <div className="space-y-3">
+      {mine.map((v) => (
+        <div key={v.id} className="bg-white border border-gray-100 rounded-2xl p-4 space-y-1">
+          <p className="font-dm-sans text-sm font-semibold text-brand-black">
+            Violation · <span className="text-gray-400 font-normal">{v.status}</span>
+          </p>
+          {v.description && <p className="font-dm-sans text-xs text-gray-600">{v.description}</p>}
+          {v.screenshot_urls && v.screenshot_urls.length > 0 && (
+            <div className="flex gap-2 mt-2 flex-wrap">
+              {v.screenshot_urls.map((src, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={src} alt="" className="rounded-lg border border-gray-200 max-h-40" />
+              ))}
+            </div>
+          )}
+          <p className="font-dm-sans text-[11px] text-gray-400">{new Date(v.created_at).toLocaleDateString('es')}</p>
+        </div>
+      ))}
     </div>
   )
 }
@@ -668,6 +808,31 @@ function CreatorOverview({ creator, startTransition, isPending, fb, copyToClipbo
       >
         {isPending ? 'Guardando…' : 'Guardar cambios'}
       </button>
+
+      {/* Danger zone — irreversible, so we use a hard confirm and a clear
+          red affordance. Server action deleteCreator also removes the
+          Supabase Auth user via findAuthUserByEmail. */}
+      <div className="mt-8 pt-6 border-t-2 border-red-100">
+        <h3 className="font-dm-sans font-bold text-sm text-red-700 mb-2">Zona peligrosa</h3>
+        <p className="font-dm-sans text-xs text-gray-500 mb-3">
+          Eliminar borra esta creadora de la base de datos y su cuenta de Supabase Auth. No se puede deshacer.
+        </p>
+        <button
+          disabled={isPending}
+          onClick={() => {
+            const label = creator.name || creator.email
+            if (!confirm(`¿Estás segura? Esto eliminará a ${label} permanentemente.`)) return
+            startTransition(async () => {
+              const res = await deleteCreator(creator.id)
+              if (res.error) fb(`Error: ${res.error}`)
+              else fb(`✓ ${label} eliminada`)
+            })
+          }}
+          className="font-dm-sans text-sm font-semibold bg-red-600 text-white px-4 py-2 rounded-xl hover:bg-red-700 transition disabled:opacity-50"
+        >
+          {isPending ? 'Eliminando…' : 'Eliminar creadora'}
+        </button>
+      </div>
     </div>
   )
 }
@@ -2856,6 +3021,11 @@ function RewardsTab({ rewards, creatorRewards, levels }: { rewards: RewardRow[];
 }
 
 // ── Deliverables Tab ─────────────────────────────────────────────────────────
+// Standalone tab removed in the Phase 1 restructure — deliverables now live
+// inside each creator's profile (CreatorTodo sub-tab) and on the creator
+// dashboard. Keeping the function around for the next phase; suppress the
+// unused-var warning until it's wired back in or deleted.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function DeliverablesTab({ deliverables, creators }: { deliverables: DeliverableRow[]; creators: Creator[] }) {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ creator_id: '', brand_name: '', deliverable_type: 'video', due_date: '', notes: '' })
@@ -3279,6 +3449,11 @@ function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] 
 }
 
 // ── Violations Tab ───────────────────────────────────────────────────────────
+// Standalone tab removed in Phase 1 — violations now appear inside each
+// creator's profile (CreatorViolationsView). Keeping the implementation so
+// we don't lose the inline screenshot viewer and the bulk admin actions
+// while the per-creator view is fleshed out.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ViolationsTab({ violations }: { violations: ViolationRow[] }) {
   const [fullScreenUrl, setFullScreenUrl] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -3607,11 +3782,13 @@ function AdminDashboardTab({
   stats,
   currentMonthIso,
   prevMonthIso,
+  settings,
 }: {
   creators: Creator[]
   stats: DashboardStatRow[]
   currentMonthIso: string
   prevMonthIso: string
+  settings: SiteSettings | null
 }) {
   const active = creators.filter((c) => c.is_active)
   const totalActive = active.length
@@ -3689,8 +3866,39 @@ function AdminDashboardTab({
 
   const currency = (n: number) => `$${Math.round(n).toLocaleString('en-US')}`
 
+  const agencyGoal = Number(settings?.agency_gmv_goal ?? 0)
+  const agencyPct = agencyGoal > 0 ? Math.min((totalGmvThisMonth / agencyGoal) * 100, 100) : 0
+  const agencyMet = agencyGoal > 0 && totalGmvThisMonth >= agencyGoal
+
   return (
     <div className="space-y-6">
+      {/* Agency GMV goal — edit the number in Settings → Agency GMV goal.
+          Hidden entirely when no goal is set so we don't render a bar
+          stuck at 0%. */}
+      {agencyGoal > 0 && (
+        <div className="bg-white border border-brand-pink/30 rounded-2xl p-5">
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
+            <h3 className="font-playfair text-lg text-brand-black">
+              GMV de la agencia este mes
+            </h3>
+            <p className="font-dm-sans text-sm text-gray-500">
+              <span className="font-bold text-brand-black">{currency(totalGmvThisMonth)}</span>
+              <span className="text-gray-400"> de </span>
+              <span className="font-bold text-brand-black">{currency(agencyGoal)}</span>
+              <span className={`ml-2 font-bold ${agencyMet ? 'text-emerald-600' : 'text-brand-pink'}`}>
+                · {Math.round(agencyPct)}%{agencyMet ? ' ✅' : ''}
+              </span>
+            </p>
+          </div>
+          <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+            <div
+              className={`h-full transition-all ${agencyMet ? 'bg-emerald-500' : 'bg-brand-pink'}`}
+              style={{ width: `${agencyPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Top stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Creators activos" value={String(totalActive)} accent="brand-green" />
@@ -3886,29 +4094,27 @@ function StatCard({ label, value, accent, hint }: { label: string; value: string
   )
 }
 
-type Tab = 'dashboard' | 'creators' | 'products' | 'campaigns' | 'applications' | 'requests' | 'initiation' | 'strategy' | 'levels' | 'rewards' | 'settings' | 'deliverables' | 'config' | 'violations' | 'announcements' | 'papaya-picks'
+// Top-level admin tabs. The old standalone Strategy/Deliverables/Violations
+// tabs have moved inside the creator profile. Applications merged into
+// Campaigns, Requests merged into Products, Niveles + Recompensas merged.
+// Initiation, Papaya Picks, and Configuración kept reachable but no longer
+// in the top nav — they read from the same data the renamed tabs surface.
+type Tab = 'dashboard' | 'creators' | 'campaigns-applications' | 'products-requests' | 'announcements' | 'niveles-recompensas' | 'settings'
 
-export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, deliverables, levelConfigs, violations, announcements, papayaPicks, dashboardStats, currentMonthIso, prevMonthIso }: AdminPanelProps) {
+export default function AdminPanel({ creators, products, campaigns, applications, productRequests, initiationSelections, levels, rewards, creatorRewards, settings, levelConfigs, violations, announcements, papayaPicks, dashboardStats, currentMonthIso, prevMonthIso }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [isPending, startTransition] = useTransition()
 
+  const pendingRequestsCount = productRequests.filter((r) => r.status === 'pending').length
+  const pendingApplicationsCount = applications.length
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: 'dashboard', label: '📊 Dashboard' },
     { id: 'creators', label: 'Creators', count: creators.length },
-    { id: 'applications', label: 'Applications', count: applications.length },
-    { id: 'requests', label: 'Requests', count: productRequests.filter((r) => r.status === 'pending').length },
-    { id: 'campaigns', label: 'Campaigns', count: campaigns.length },
-    { id: 'products', label: 'Products', count: products.length },
-    { id: 'strategy', label: 'Strategy' },
-    { id: 'initiation', label: 'Initiation', count: initiationSelections.filter((s, i, arr) => arr.findIndex((x) => x.creator_id === s.creator_id) === i).length },
-    { id: 'deliverables', label: 'Entregas', count: deliverables.length },
-    { id: 'levels', label: 'Niveles', count: levels.length },
-    { id: 'rewards', label: 'Recompensas', count: rewards.length },
-    { id: 'violations', label: 'Violations', count: violations.filter((v) => v.status === 'pending').length },
+    { id: 'campaigns-applications', label: 'Campaigns & Applications', count: pendingApplicationsCount },
+    { id: 'products-requests', label: 'Products & Requests', count: pendingRequestsCount },
     { id: 'announcements', label: 'Announcements', count: announcements.filter((a) => a.is_active).length },
-    { id: 'papaya-picks', label: '🌟 Papaya Picks', count: papayaPicks.filter((p) => p.is_active).length },
+    { id: 'niveles-recompensas', label: 'Niveles & Recompensas', count: levels.length + rewards.length },
     { id: 'settings', label: 'Settings' },
-    { id: 'config', label: 'Configuración' },
   ]
 
   return (
@@ -3978,23 +4184,63 @@ export default function AdminPanel({ creators, products, campaigns, applications
               stats={dashboardStats}
               currentMonthIso={currentMonthIso}
               prevMonthIso={prevMonthIso}
+              settings={settings}
             />
           )}
-          {activeTab === 'creators' && <CreatorsTab creators={creators} products={products} campaigns={campaigns} />}
-          {activeTab === 'products' && <ProductsTab products={products} />}
-          {activeTab === 'campaigns' && <CampaignsTab campaigns={campaigns} products={products} />}
-          {activeTab === 'applications' && <ApplicationsTab applications={applications} />}
-          {activeTab === 'requests' && <RequestsTab productRequests={productRequests} />}
-          {activeTab === 'initiation' && <InitiationTab selections={initiationSelections} />}
-          {activeTab === 'strategy' && <StrategyManager creators={creators} products={products} campaigns={campaigns} />}
-          {activeTab === 'levels' && <LevelsTab levels={levels} />}
-          {activeTab === 'rewards' && <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />}
-          {activeTab === 'settings' && <SettingsTab settings={settings} />}
-          {activeTab === 'deliverables' && <DeliverablesTab deliverables={deliverables} creators={creators} />}
-          {activeTab === 'violations' && <ViolationsTab violations={violations} />}
+          {activeTab === 'creators' && (
+            <CreatorsTab
+              creators={creators}
+              products={products}
+              campaigns={campaigns}
+              creatorRewards={creatorRewards}
+              productRequests={productRequests}
+              violations={violations}
+            />
+          )}
+          {activeTab === 'campaigns-applications' && (
+            <div className="space-y-8">
+              <CampaignsTab campaigns={campaigns} products={products} />
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">Applications</h2>
+                <ApplicationsTab applications={applications} />
+              </div>
+            </div>
+          )}
+          {activeTab === 'products-requests' && (
+            <div className="space-y-8">
+              <ProductsTab products={products} />
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">Solicitudes de productos</h2>
+                <RequestsTab productRequests={productRequests} />
+              </div>
+              {/* Initiation product selections and Papaya Picks editor reachable
+                  from the same tab so we don't lose surface area while the
+                  full restructure rolls out in phases. */}
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">🌟 Papaya Picks</h2>
+                <PapayaPicksTab picks={papayaPicks} />
+              </div>
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">Initiation</h2>
+                <InitiationTab selections={initiationSelections} />
+              </div>
+            </div>
+          )}
           {activeTab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
-          {activeTab === 'papaya-picks' && <PapayaPicksTab picks={papayaPicks} />}
-          {activeTab === 'config' && <LevelConfigTab levelConfigs={levelConfigs} />}
+          {activeTab === 'niveles-recompensas' && (
+            <div className="space-y-8">
+              <LevelsTab levels={levels} />
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">Recompensas</h2>
+                <RewardsTab rewards={rewards} creatorRewards={creatorRewards} levels={levels} />
+              </div>
+              <div className="border-t border-gray-200 pt-8">
+                <h2 className="font-playfair text-2xl text-brand-black mb-4">Configuración de niveles</h2>
+                <LevelConfigTab levelConfigs={levelConfigs} />
+              </div>
+            </div>
+          )}
+          {activeTab === 'settings' && <SettingsTab settings={settings} />}
         </div>
       </div>
     </div>

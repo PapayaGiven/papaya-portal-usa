@@ -241,6 +241,8 @@ export interface SiteSettings {
   booking_link_elite: string | null
   google_sheets_url: string | null
   last_synced_at: string | null
+  agency_gmv_goal: number | null
+  agency_gmv_goal_month: string | null
 }
 
 export const LEVEL_CONFIG: Record<CreatorLevel, { min: number; max: number; target: number | null; color: string; next: CreatorLevel | null }> = {

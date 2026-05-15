@@ -14,6 +14,7 @@ import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
 import PersonalGoalNotes from '@/components/PersonalGoalNotes'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
+import DashboardExtras from './DashboardExtras'
 import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex, canSeePapayaPicks } from '@/lib/levelAccess'
 
 function computeBanner(
@@ -169,6 +170,35 @@ export default async function DashboardPage() {
     deliverablesCount = count ?? 0
   }
 
+  // Inbox + open deliverables for the DashboardExtras banner/card. RLS on
+  // both tables scopes the rows to the signed-in creator. The deliverables
+  // policy was added in migration 015 — if the migration hasn't been
+  // applied yet, the query returns 0 rows instead of erroring.
+  type NotifRow = { id: string; title: string; message: string | null; type: string | null; created_at: string }
+  type DeliverableForCreator = { id: string; brand_name: string; deliverable_type: string; due_date: string | null; status: string; notes: string | null }
+  let unreadNotifications: NotifRow[] = []
+  let openDeliverables: DeliverableForCreator[] = []
+  if (creator) {
+    const [notifRes, dlvRes] = await Promise.all([
+      supabase
+        .from('creator_notifications')
+        .select('id, title, message, type, created_at')
+        .eq('creator_id', creator.id)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false })
+        .limit(10),
+      supabase
+        .from('deliverables')
+        .select('id, brand_name, deliverable_type, due_date, status, notes')
+        .eq('creator_id', creator.id)
+        .neq('status', 'done')
+        .order('due_date', { ascending: true })
+        .limit(20),
+    ])
+    unreadNotifications = (notifRes.data ?? []) as NotifRow[]
+    openDeliverables = (dlvRes.data ?? []) as DeliverableForCreator[]
+  }
+
   // Fetch active announcements
   const { data: announcementsData } = await admin.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(5)
   const activeAnnouncements = (announcementsData ?? []) as { id: string; title: string; body: string | null; image_url: string | null; created_at: string }[]
@@ -217,6 +247,10 @@ export default async function DashboardPage() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Inbox notifications + open deliverables. Self-hides when both
+            arrays are empty so it doesn't leave a gap at the top. */}
+        <DashboardExtras notifications={unreadNotifications} deliverables={openDeliverables} />
+
         {/* Greeting row */}
         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <Image
