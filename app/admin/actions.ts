@@ -821,9 +821,15 @@ export async function addAnnouncement(data: {
   title: string
   body: string | null
   image_url: string | null
+  display_type?: 'banner' | 'popup'
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
-  const { error } = await supabase.from('announcements').insert(data)
+  // Default to 'banner' for backward compatibility — that's what every
+  // existing announcement was before migration 016.
+  const { error } = await supabase.from('announcements').insert({
+    ...data,
+    display_type: data.display_type ?? 'banner',
+  })
   if (error) return { error: error.message }
   revalidatePath('/admin')
   revalidatePath('/dashboard')
@@ -835,6 +841,7 @@ export async function updateAnnouncement(id: string, data: {
   body?: string | null
   image_url?: string | null
   is_active?: boolean
+  display_type?: 'banner' | 'popup'
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const { error } = await supabase.from('announcements').update(data).eq('id', id)

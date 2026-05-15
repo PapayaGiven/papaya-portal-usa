@@ -120,6 +120,9 @@ interface AnnouncementRow {
   body: string | null
   image_url: string | null
   is_active: boolean
+  // 'banner' = dismissible sticky bar, 'popup' = full-screen modal shown
+  // once per user. Defaults to 'banner' on the DB side via migration 016.
+  display_type: 'banner' | 'popup'
   created_at: string
 }
 
@@ -1313,7 +1316,34 @@ function CreatorCalls({ creator, startTransition, isPending, fb }: {
 
 
 // ── Products Tab ──────────────────────────────────────────────────────────────
-function ProductsTab({ products }: { products: Product[] }) {
+function ProductsTab({ products, papayaPicks }: { products: Product[]; papayaPicks: PapayaPick[] }) {
+  // Search + filter state. Search is debounced 300ms so we don't re-render
+  // the whole list on every keystroke for large catalogs.
+  const [searchInput, setSearchInput] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [productFilter, setProductFilter] = useState<'all' | 'pick' | 'initiation' | 'exclusive'>('all')
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQuery(searchInput.trim().toLowerCase()), 300)
+    return () => clearTimeout(t)
+  }, [searchInput])
+
+  // PapayaPick doesn't store product_id, so match by lowercased product_name.
+  // Imperfect but the best signal we have without a join table.
+  const pickProductNames = new Set(papayaPicks.map((p) => p.product_name.toLowerCase().trim()))
+  function isPapayaPick(p: Product): boolean {
+    return pickProductNames.has((p.name ?? '').toLowerCase().trim())
+  }
+
+  const filteredProducts = products.filter((p) => {
+    if (productFilter === 'pick' && !isPapayaPick(p)) return false
+    if (productFilter === 'initiation' && !p.approved_for_initiation) return false
+    if (productFilter === 'exclusive' && !p.is_exclusive) return false
+    if (searchQuery) {
+      const hay = `${p.name ?? ''} ${(p as unknown as { brand?: string }).brand ?? ''} ${p.niche ?? ''}`.toLowerCase()
+      if (!hay.includes(searchQuery)) return false
+    }
+    return true
+  })
   const [showAdd, setShowAdd] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [availableTags, setAvailableTags] = useState<string[]>(DEFAULT_TAGS)
@@ -1520,6 +1550,43 @@ function ProductsTab({ products }: { products: Product[] }) {
 
       <Feedback msg={feedback} />
 
+      {/* Search + filter pills. Search is debounced (300ms) above; filter
+          pills toggle without debounce. The "Mostrando X de Y" line gives
+          a quick read of how many rows the current filter is hiding. */}
+      <div className="bg-white border border-gray-100 rounded-2xl p-4 mb-4 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <input
+            type="search"
+            placeholder="Buscar por nombre, marca o niche…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="input-field flex-1 min-w-[200px]"
+          />
+          <p className="font-dm-sans text-xs text-gray-500 whitespace-nowrap">
+            Mostrando <span className="font-bold text-brand-black">{filteredProducts.length}</span> de {products.length} productos
+          </p>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {([
+            ['all', 'Todos'],
+            ['pick', '⭐ Papaya Pick'],
+            ['initiation', '✓ Approved for Initiation'],
+            ['exclusive', '🔒 Exclusive'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setProductFilter(key)}
+              className={`font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-full transition ${
+                productFilter === key
+                  ? 'bg-brand-green text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >{label}</button>
+          ))}
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-2xl border border-gray-100">
         <table className="w-full text-sm font-dm-sans">
           <thead className="bg-gray-50 border-b border-gray-100">
@@ -1530,10 +1597,12 @@ function ProductsTab({ products }: { products: Product[] }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {products.length === 0 && (
-              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">No products yet.</td></tr>
+            {filteredProducts.length === 0 && (
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                {products.length === 0 ? 'No products yet.' : 'Ningún producto coincide con los filtros.'}
+              </td></tr>
             )}
-            {products.map((p) => (
+            {filteredProducts.map((p) => (
               <>
               <tr key={p.id} className="bg-white hover:bg-gray-50/50 transition-colors">
                 <td className="px-4 py-3">
@@ -3296,10 +3365,12 @@ function LevelConfigTab({ levelConfigs }: { levelConfigs: LevelConfigRow[] }) {
 // ── Announcements Tab ────────────────────────────────────────────────────────
 function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] }) {
   const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({ title: '', body: '', image_url: '' })
+  const [form, setForm] = useState<{ title: string; body: string; image_url: string; display_type: 'banner' | 'popup' }>({ title: '', body: '', image_url: '', display_type: 'banner' })
   const [uploading, setUploading] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  // Per-row display_type editor — null when nothing is being edited.
+  const [editingDisplayType, setEditingDisplayType] = useState<{ id: string; value: 'banner' | 'popup' } | null>(null)
 
   function fb(msg: string) { setFeedback(msg); setTimeout(() => setFeedback(null), 4000) }
 
@@ -3322,9 +3393,10 @@ function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] 
         title: form.title,
         body: form.body || null,
         image_url: form.image_url || null,
+        display_type: form.display_type,
       })
       if (r.error) fb(`Error: ${r.error}`)
-      else { fb('Announcement created!'); setForm({ title: '', body: '', image_url: '' }); setShowAdd(false) }
+      else { fb('Announcement created!'); setForm({ title: '', body: '', image_url: '', display_type: 'banner' }); setShowAdd(false) }
     })
   }
 
@@ -3376,20 +3448,56 @@ function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] 
             />
           </div>
           <div>
+            <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de visualización</label>
+            <div className="flex gap-3">
+              {([
+                ['banner', 'Banner (barra superior)'],
+                ['popup', 'Pop-up (pantalla completa)'],
+              ] as const).map(([value, label]) => (
+                <label
+                  key={value}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 cursor-pointer transition ${
+                    form.display_type === value
+                      ? 'border-brand-green bg-brand-green/5'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="display_type"
+                    checked={form.display_type === value}
+                    onChange={() => setForm((f) => ({ ...f, display_type: value }))}
+                    className="accent-brand-green"
+                  />
+                  <span className="font-dm-sans text-sm text-brand-black">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
             <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Image (optional)</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              disabled={uploading}
-              className="font-dm-sans text-sm text-gray-600"
-            />
-            {uploading && <p className="font-dm-sans text-xs text-gray-400 mt-1">Uploading...</p>}
-            {form.image_url && (
-              <div className="mt-2">
+            {!form.image_url ? (
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                disabled={uploading}
+                className="font-dm-sans text-sm text-gray-600"
+              />
+            ) : (
+              // X button clears image_url so the file picker comes back.
+              <div className="relative inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={form.image_url} alt="Preview" className="w-32 h-20 object-cover rounded-lg border border-gray-200" />
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, image_url: '' }))}
+                  title="Quitar imagen"
+                  className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 text-white text-sm font-bold leading-none flex items-center justify-center shadow hover:bg-red-600"
+                >×</button>
               </div>
             )}
+            {uploading && <p className="font-dm-sans text-xs text-gray-400 mt-1">Uploading...</p>}
           </div>
           <button
             disabled={isPending}
@@ -3414,14 +3522,55 @@ function AnnouncementsTab({ announcements }: { announcements: AnnouncementRow[] 
                     <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${a.is_active ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
                       {a.is_active ? 'Active' : 'Inactive'}
                     </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${a.display_type === 'popup' ? 'bg-purple-50 text-purple-700' : 'bg-blue-50 text-blue-700'}`}>
+                      {a.display_type === 'popup' ? '🪟 Pop-up' : '📢 Banner'}
+                    </span>
                   </div>
                   {a.body && <p className="font-dm-sans text-sm text-gray-600 mb-2">{a.body}</p>}
                   {a.image_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={a.image_url} alt="Announcement" className="w-40 h-24 object-cover rounded-lg border border-gray-200" />
                   )}
                   <p className="font-dm-sans text-xs text-gray-400 mt-2">
                     {new Date(a.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </p>
+                  {/* Inline display_type editor — opens the radio choice for
+                      this row only. Saves immediately on change. */}
+                  {editingDisplayType?.id === a.id ? (
+                    <div className="flex gap-2 mt-2 flex-wrap">
+                      {(['banner', 'popup'] as const).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => {
+                            setEditingDisplayType({ id: a.id, value })
+                            startTransition(async () => {
+                              const r = await updateAnnouncement(a.id, { display_type: value })
+                              if (r.error) fb(`Error: ${r.error}`)
+                              else { fb('✓ Tipo actualizado'); setEditingDisplayType(null) }
+                            })
+                          }}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border-2 transition ${
+                            editingDisplayType.value === value ? 'border-brand-green bg-brand-green/10' : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {value === 'banner' ? 'Banner' : 'Pop-up'}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setEditingDisplayType(null)}
+                        className="font-dm-sans text-xs text-gray-400 hover:text-gray-600 px-2"
+                      >Cancelar</button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setEditingDisplayType({ id: a.id, value: a.display_type })}
+                      className="font-dm-sans text-xs text-brand-green hover:underline mt-1"
+                    >Cambiar tipo</button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -4208,22 +4357,41 @@ export default function AdminPanel({ creators, products, campaigns, applications
           )}
           {activeTab === 'products-requests' && (
             <div className="space-y-8">
-              <ProductsTab products={products} />
-              <div className="border-t border-gray-200 pt-8">
+              {/* Sticky sub-nav so Requests / Papaya Picks / Initiation are
+                  reachable in one click instead of scrolling past the full
+                  product table. Anchor links jump to the matching section. */}
+              <nav className="sticky top-16 z-20 -mx-6 px-6 py-3 bg-white border-b border-gray-200 flex gap-2 flex-wrap">
+                <a href="#productos" className="font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 text-brand-black hover:bg-gray-200 transition">
+                  Productos <span className="ml-1 text-gray-500">({products.length})</span>
+                </a>
+                <a href="#solicitudes" className="font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-full bg-brand-pink/20 text-brand-black hover:bg-brand-pink/30 transition">
+                  Solicitudes <span className="ml-1 text-brand-pink">({pendingRequestsCount})</span>
+                </a>
+                <a href="#papaya-picks" className="font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 text-brand-black hover:bg-gray-200 transition">
+                  🌟 Papaya Picks <span className="ml-1 text-gray-500">({papayaPicks.length})</span>
+                </a>
+                <a href="#initiation" className="font-dm-sans text-xs font-semibold px-3 py-1.5 rounded-full bg-gray-100 text-brand-black hover:bg-gray-200 transition">
+                  Initiation
+                </a>
+              </nav>
+              <section id="productos" className="scroll-mt-32">
+                <ProductsTab products={products} papayaPicks={papayaPicks} />
+              </section>
+              <section id="solicitudes" className="scroll-mt-32 border-t border-gray-200 pt-8">
                 <h2 className="font-playfair text-2xl text-brand-black mb-4">Solicitudes de productos</h2>
                 <RequestsTab productRequests={productRequests} />
-              </div>
+              </section>
               {/* Initiation product selections and Papaya Picks editor reachable
                   from the same tab so we don't lose surface area while the
                   full restructure rolls out in phases. */}
-              <div className="border-t border-gray-200 pt-8">
+              <section id="papaya-picks" className="scroll-mt-32 border-t border-gray-200 pt-8">
                 <h2 className="font-playfair text-2xl text-brand-black mb-4">🌟 Papaya Picks</h2>
                 <PapayaPicksTab picks={papayaPicks} />
-              </div>
-              <div className="border-t border-gray-200 pt-8">
+              </section>
+              <section id="initiation" className="scroll-mt-32 border-t border-gray-200 pt-8">
                 <h2 className="font-playfair text-2xl text-brand-black mb-4">Initiation</h2>
                 <InitiationTab selections={initiationSelections} />
-              </div>
+              </section>
             </div>
           )}
           {activeTab === 'announcements' && <AnnouncementsTab announcements={announcements} />}
