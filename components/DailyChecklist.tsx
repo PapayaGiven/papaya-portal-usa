@@ -7,6 +7,9 @@ interface StrategyProductItem {
   id: string
   product?: { name: string } | null
   videos_per_day: number | null
+  // 'day' or 'week'. When 'week', the stored number is per-week — we
+  // divide by 7 (rounded up) to get the daily expectation in the prompt.
+  frequency_type?: 'day' | 'week' | null
   live_hours_per_week: number | null
 }
 
@@ -33,11 +36,18 @@ export default function DailyChecklist({ creatorId, strategyProducts, checklistE
     const name = sp.product?.name ?? 'Product'
     const entry = entryMap.get(sp.id)
     if ((sp.videos_per_day ?? 0) > 0) {
+      // Per-week strategies divide their total by 7 for the daily ask.
+      // Round up so "5 / week" reads as "1 per day" rather than 0.71.
+      const dailyTarget =
+        sp.frequency_type === 'week'
+          ? Math.max(1, Math.ceil((sp.videos_per_day ?? 0) / 7))
+          : sp.videos_per_day ?? 0
+      const targetSuffix = dailyTarget > 1 ? ` (meta ${dailyTarget} hoy)` : ''
       items.push({
         productId: sp.id,
         productName: name,
         field: 'video_posted',
-        label: `¿Publicaste tu video de ${name} hoy?`,
+        label: `¿Publicaste tu video de ${name} hoy?${targetSuffix}`,
         done: entry?.video_posted ?? false,
       })
     }

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Creator, Product, Campaign } from '@/lib/types'
-import { saveStrategy, getStrategyForAdmin, StrategyProductInput, VideoInput } from '@/app/admin/actions'
+import { saveStrategy, getStrategyForAdmin, copyStrategyWeek, getStrategyWeekCounts, StrategyProductInput, VideoInput } from '@/app/admin/actions'
 
 interface StrategyManagerProps {
   creators: Creator[]
@@ -33,6 +33,7 @@ function emptyProduct(): StrategyProductForm {
     product_id: '',
     priority: 'Secondary',
     videos_per_day: null,
+    frequency_type: 'day',
     live_hours_per_week: null,
     gmv_target: null,
     strategy_note: '',
@@ -79,7 +80,7 @@ export default function StrategyManager({ creators, products, campaigns, default
     setLoading(true)
     const monthDate = `${month}-01`
     startTransition(async () => {
-      const result = await getStrategyForAdmin(creatorId, monthDate)
+      const result = await getStrategyForAdmin(creatorId, monthDate, selectedWeek)
       setLoading(false)
       if (result.error) { fb(`Error: ${result.error}`); return }
       if (!result.data) {
@@ -95,6 +96,7 @@ export default function StrategyManager({ creators, products, campaigns, default
           product_id: (p.product_id as string) ?? '',
           priority: (p.priority as string) ?? 'Secondary',
           videos_per_day: p.videos_per_day as number | null,
+          frequency_type: ((p.frequency_type as string) === 'week' ? 'week' : 'day') as 'day' | 'week',
           live_hours_per_week: p.live_hours_per_week as number | null,
           gmv_target: p.gmv_target as number | null,
           strategy_note: (p.strategy_note as string) ?? '',
@@ -164,6 +166,45 @@ export default function StrategyManager({ creators, products, campaigns, default
     })
   }
 
+  /**
+   * Copies the current week's strategy products to the other three
+   * weeks. Asks for confirmation. If any target week already has rows,
+   * the second prompt picks replace vs. merge.
+   */
+  function handleCopyToAllWeeks() {
+    if (!creatorId || !month) { fb('Error: Carga primero una estrategia.'); return }
+    const monthDate = `${month}-01`
+    const targets = [1, 2, 3, 4].filter((w) => w !== selectedWeek)
+    const ok = confirm(
+      `¿Copiar la estrategia de Semana ${selectedWeek} a las semanas ${targets.join(', ')}?`,
+    )
+    if (!ok) return
+
+    startTransition(async () => {
+      // Look at what's already in the target weeks so we can ask
+      // replace-vs-merge only when it actually matters.
+      const { counts, error } = await getStrategyWeekCounts(creatorId, monthDate)
+      if (error) { fb(`Error: ${error}`); return }
+      const occupied = targets.filter((w) => (counts?.[w] ?? 0) > 0)
+
+      let mode: 'replace' | 'merge' = 'replace'
+      if (occupied.length > 0) {
+        const message = `Las semanas ${occupied.join(', ')} ya tienen productos. ¿Reemplazar (OK) o agregar (Cancelar)?`
+        mode = confirm(message) ? 'replace' : 'merge'
+      }
+
+      const result = await copyStrategyWeek({
+        creator_id: creatorId,
+        month: monthDate,
+        source_week: selectedWeek,
+        target_weeks: targets,
+        mode,
+      })
+      if (result.error) fb(`Error: ${result.error}`)
+      else fb('Estrategia copiada a todas las semanas ✓')
+    })
+  }
+
   function handleSave() {
     if (!creatorId) { fb('Error: Selecciona una creadora.'); return }
     if (!month) { fb('Error: Selecciona un mes.'); return }
@@ -172,6 +213,7 @@ export default function StrategyManager({ creators, products, campaigns, default
       const result = await saveStrategy({
         creator_id: creatorId,
         month: monthDate,
+        week: selectedWeek,
         products: strategyProducts,
       })
       if (result.error) fb(`Error: ${result.error}`)
@@ -238,6 +280,21 @@ export default function StrategyManager({ creators, products, campaigns, default
           >
             {loading ? 'Cargando...' : 'Cargar / crear estrategia'}
           </button>
+        </div>
+
+        {/* Copy current week to weeks 2/3/4 — most common admin shortcut. */}
+        <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            disabled={!creatorId || !month || isPending}
+            onClick={handleCopyToAllWeeks}
+            className="font-dm-sans text-sm font-semibold bg-brand-pink text-white px-4 py-2 rounded-xl hover:bg-brand-pink/90 transition disabled:opacity-40"
+          >
+            📋 Copiar a todas las semanas
+          </button>
+          <p className="font-dm-sans text-xs text-gray-500">
+            Duplica los productos de Semana {selectedWeek} a las otras 3 semanas.
+          </p>
         </div>
       </div>
 
@@ -404,16 +461,37 @@ export default function StrategyManager({ creators, products, campaigns, default
               {/* Stats */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Videos / Día</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={sp.videos_per_day ?? ''}
-                    onChange={(e) => updateProduct(pi, { videos_per_day: e.target.value ? parseFloat(e.target.value) : null })}
-                    placeholder="ej. 2"
-                    className="input-field w-full"
-                  />
+                  <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">
+                    Videos {(sp.frequency_type ?? 'day') === 'week' ? '/ Semana' : '/ Día'}
+                  </label>
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={sp.videos_per_day ?? ''}
+                      onChange={(e) => updateProduct(pi, { videos_per_day: e.target.value ? parseFloat(e.target.value) : null })}
+                      placeholder={(sp.frequency_type ?? 'day') === 'week' ? 'ej. 5' : 'ej. 2'}
+                      className="input-field flex-1"
+                    />
+                    <div className="flex gap-0.5 bg-gray-50 border border-gray-200 rounded-xl p-0.5">
+                      {(['day', 'week'] as const).map((ft) => {
+                        const active = (sp.frequency_type ?? 'day') === ft
+                        return (
+                          <button
+                            key={ft}
+                            type="button"
+                            onClick={() => updateProduct(pi, { frequency_type: ft })}
+                            className={`font-dm-sans text-[11px] font-semibold px-2 rounded-lg transition ${
+                              active ? 'bg-brand-green text-white' : 'text-gray-500 hover:text-brand-black'
+                            }`}
+                          >
+                            {ft === 'day' ? 'por día' : 'por semana'}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <label className="block font-dm-sans text-xs font-medium text-gray-500 mb-1">Horas live / Semana</label>

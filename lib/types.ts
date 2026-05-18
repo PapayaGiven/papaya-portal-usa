@@ -175,6 +175,10 @@ export interface StrategyProduct {
   product_id: string | null
   priority: StrategyPriority
   videos_per_day: number | null
+  // 'day' (default) means videos_per_day is literal. 'week' means the
+  // number is per week — creator-facing copy + daily-checklist math
+  // divide by 7 to surface a daily expectation.
+  frequency_type?: 'day' | 'week' | null
   live_hours_per_week: number | null
   gmv_target: number | null
   strategy_note: string | null

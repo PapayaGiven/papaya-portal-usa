@@ -2370,6 +2370,19 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
   const [copied, setCopied] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // Agency GMV goal — feeds the big progress bar on the Dashboard tab.
+  // Month is stored as a date (first day of the month) in
+  // settings.agency_gmv_goal_month; the <input type="month"> binds to
+  // the "YYYY-MM" portion.
+  const now = new Date()
+  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const savedGoalMonth = settings?.agency_gmv_goal_month?.slice(0, 7) ?? defaultMonth
+  const [agencyForm, setAgencyForm] = useState({
+    goal: settings?.agency_gmv_goal != null ? String(settings.agency_gmv_goal) : '',
+    month: savedGoalMonth,
+  })
+
   const [bookingForm, setBookingForm] = useState({
     calls_per_month_initiation: settings?.calls_per_month_initiation ?? 0,
     calls_per_month_foundation: settings?.calls_per_month_foundation ?? 0,
@@ -2400,6 +2413,69 @@ function SettingsTab({ settings }: { settings: SiteSettings | null }) {
 
   return (
     <div className="space-y-6">
+      {/* Agency GMV goal — top of Settings so it's the first thing
+          admin sees. Feeds the dashboard progress bar. */}
+      <div>
+        <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">Meta de la agencia</h2>
+        <div className="bg-white border border-brand-pink/30 rounded-2xl p-5 space-y-4">
+          {settings?.agency_gmv_goal != null && Number(settings.agency_gmv_goal) > 0 && (
+            <div className="bg-brand-pink/10 border border-brand-pink/20 rounded-xl px-4 py-3">
+              <p className="font-dm-sans text-xs text-gray-500 uppercase tracking-wide">Meta guardada</p>
+              <p className="font-playfair text-2xl text-brand-black mt-1">
+                ${Number(settings.agency_gmv_goal).toLocaleString('en-US')}
+                {settings.agency_gmv_goal_month && (
+                  <span className="font-dm-sans text-sm text-gray-500 ml-2">
+                    · {settings.agency_gmv_goal_month.slice(0, 7)}
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Mes</label>
+              <input
+                type="month"
+                value={agencyForm.month}
+                onChange={(e) => setAgencyForm((f) => ({ ...f, month: e.target.value }))}
+                className="input-field w-full"
+              />
+            </div>
+            <div>
+              <label className="block font-dm-sans text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">GMV meta ($)</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={agencyForm.goal}
+                onChange={(e) => setAgencyForm((f) => ({ ...f, goal: e.target.value }))}
+                placeholder="ej. 50000"
+                className="input-field w-full"
+              />
+            </div>
+          </div>
+          <button
+            disabled={isPending || !agencyForm.month}
+            onClick={() => startTransition(async () => {
+              const numericGoal = agencyForm.goal === '' ? null : Number(agencyForm.goal)
+              if (numericGoal != null && !Number.isFinite(numericGoal)) {
+                fb('Error: GMV inválido'); return
+              }
+              const r = await updateSettings({
+                agency_gmv_goal: numericGoal,
+                agency_gmv_goal_month: `${agencyForm.month}-01`,
+              })
+              if (r.error) fb(`Error: ${r.error}`)
+              else fb('Meta de la agencia guardada ✓')
+            })}
+            className="font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-2.5 rounded-xl hover:bg-brand-green/90 transition disabled:opacity-50"
+          >
+            {isPending ? 'Guardando…' : 'Guardar meta'}
+          </button>
+          <Feedback msg={feedback} />
+        </div>
+      </div>
+
       <div>
         <h2 className="font-dm-sans font-bold text-lg text-brand-black mb-4">General Settings</h2>
 

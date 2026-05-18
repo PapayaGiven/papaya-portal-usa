@@ -231,6 +231,7 @@ export default async function StrategyPage() {
                 id: sp.id,
                 product: sp.product as { name: string } | null,
                 videos_per_day: sp.videos_per_day,
+                frequency_type: (sp.frequency_type ?? 'day') as 'day' | 'week',
                 live_hours_per_week: sp.live_hours_per_week,
               }))}
               checklistEntries={checklistEntries}
@@ -357,7 +358,9 @@ export default async function StrategyPage() {
                         <div className="grid grid-cols-3 divide-x divide-gray-50 border-b border-gray-50">
                           <div className="px-5 py-4 text-center">
                             <p className="font-playfair text-2xl font-bold text-brand-black">{sp.videos_per_day ?? '–'}</p>
-                            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">Videos / Día</p>
+                            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">
+                              Videos / {sp.frequency_type === 'week' ? 'Semana' : 'Día'}
+                            </p>
                           </div>
                           <div className="px-5 py-4 text-center">
                             <p className="font-playfair text-2xl font-bold text-brand-black">{sp.live_hours_per_week ?? '–'}h</p>

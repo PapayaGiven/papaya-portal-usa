@@ -590,6 +590,10 @@ export interface StrategyProductInput {
   product_id: string
   priority: string
   videos_per_day: number | null
+  // 'day' = videos_per_day means literally per day. 'week' = the number
+  // is per week and the creator-facing UI divides by 7 for the daily
+  // checklist. Default 'day' (matches the column default in migration 015).
+  frequency_type?: 'day' | 'week'
   live_hours_per_week: number | null
   gmv_target: number | null
   strategy_note: string
@@ -610,9 +614,14 @@ export interface StrategyProductInput {
 export async function saveStrategy(data: {
   creator_id: string
   month: string
+  // week is 1–4. Defaults to 1 so legacy callers that don't pass it
+  // continue to operate on what would be "Semana 1" under the new
+  // model. saveStrategy only deletes/inserts rows for this week.
+  week?: number
   products: StrategyProductInput[]
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
+  const week = data.week ?? 1
 
   const { data: strategy, error: stratError } = await supabase
     .from('strategies')
@@ -622,7 +631,8 @@ export async function saveStrategy(data: {
 
   if (stratError) return { error: stratError.message }
 
-  await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id)
+  // Replace only this week's products — weeks 2/3/4 stay intact.
+  await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id).eq('week', week)
 
   for (const p of data.products) {
     const isExternal = !!p.is_external
@@ -642,9 +652,11 @@ export async function saveStrategy(data: {
       .from('strategy_products')
       .insert({
         strategy_id: strategy.id,
+        week,
         product_id: isExternal ? null : (p.product_id || null),
         priority: p.priority,
         videos_per_day: p.videos_per_day,
+        frequency_type: p.frequency_type ?? 'day',
         live_hours_per_week: p.live_hours_per_week,
         gmv_target: p.gmv_target,
         strategy_note: p.strategy_note,
@@ -687,7 +699,8 @@ export async function saveStrategy(data: {
 
 export async function getStrategyForAdmin(
   creatorId: string,
-  month: string
+  month: string,
+  week: number = 1,
 ): Promise<{ data?: { id: string; products: Record<string, unknown>[] } | null; error?: string }> {
   const supabase = createAdminClient()
 
@@ -705,11 +718,103 @@ export async function getStrategyForAdmin(
     .from('strategy_products')
     .select('*, videos:strategy_videos(*)')
     .eq('strategy_id', strategy.id)
+    .eq('week', week)
     .order('created_at')
 
   if (pError) return { error: pError.message }
 
   return { data: { id: strategy.id, products: products ?? [] } }
+}
+
+/**
+ * Counts strategy_products per week for a given strategy. Used by the
+ * "Copiar a todas las semanas" flow to decide whether to ask
+ * replace/merge.
+ */
+export async function getStrategyWeekCounts(
+  creatorId: string,
+  month: string,
+): Promise<{ counts?: Record<number, number>; error?: string }> {
+  const supabase = createAdminClient()
+  const { data: strategy } = await supabase
+    .from('strategies')
+    .select('id')
+    .eq('creator_id', creatorId)
+    .eq('month', month)
+    .maybeSingle()
+  if (!strategy) return { counts: { 1: 0, 2: 0, 3: 0, 4: 0 } }
+  const { data, error } = await supabase
+    .from('strategy_products')
+    .select('week')
+    .eq('strategy_id', strategy.id)
+  if (error) return { error: error.message }
+  const counts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0 }
+  for (const r of data ?? []) {
+    const w = (r as { week?: number }).week ?? 1
+    counts[w] = (counts[w] ?? 0) + 1
+  }
+  return { counts }
+}
+
+/**
+ * Duplicates strategy_products from a source week to one or more target
+ * weeks. mode='replace' wipes the target week first; mode='merge' keeps
+ * existing rows and appends the new ones. strategy_videos are NOT
+ * copied — the videos are scoped to the original strategy_product row
+ * and a clone usually wants a clean slate.
+ */
+export async function copyStrategyWeek(data: {
+  creator_id: string
+  month: string
+  source_week: number
+  target_weeks: number[]
+  mode: 'replace' | 'merge'
+}): Promise<{ error?: string; copied?: number }> {
+  const supabase = createAdminClient()
+  const { data: strategy } = await supabase
+    .from('strategies')
+    .select('id')
+    .eq('creator_id', data.creator_id)
+    .eq('month', data.month)
+    .maybeSingle()
+  if (!strategy) return { error: 'No hay estrategia para este mes' }
+
+  const { data: source, error: sErr } = await supabase
+    .from('strategy_products')
+    .select('*')
+    .eq('strategy_id', strategy.id)
+    .eq('week', data.source_week)
+  if (sErr) return { error: sErr.message }
+  if (!source || source.length === 0) {
+    return { error: `Semana ${data.source_week} está vacía — no hay nada que copiar` }
+  }
+
+  let copied = 0
+  for (const week of data.target_weeks) {
+    if (week === data.source_week) continue
+    if (data.mode === 'replace') {
+      const { error: delErr } = await supabase
+        .from('strategy_products')
+        .delete()
+        .eq('strategy_id', strategy.id)
+        .eq('week', week)
+      if (delErr) return { error: delErr.message }
+    }
+    const rows = source.map((row) => {
+      const r = row as Record<string, unknown>
+      // Strip identity columns so insert generates fresh ids.
+      const { id: _id, created_at: _created, ...rest } = r
+      void _id; void _created
+      return { ...rest, week }
+    })
+    const { error: insErr } = await supabase.from('strategy_products').insert(rows)
+    if (insErr) return { error: insErr.message }
+    copied += rows.length
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/strategy')
+  return { copied }
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -733,6 +838,8 @@ export async function updateSettings(data: {
   booking_link_elite?: string | null
   google_sheets_url?: string | null
   last_synced_at?: string | null
+  agency_gmv_goal?: number | null
+  agency_gmv_goal_month?: string | null
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
 
