@@ -1,5 +1,8 @@
 import Image from 'next/image'
 import { createAdminClient } from '@/lib/supabase/admin'
+import HackProductsSection from './HackProductsSection'
+import PapayaPicksTeaser from './PapayaPicksTeaser'
+import type { Product } from '@/lib/types'
 
 const JOIN_URL = process.env.NEXT_PUBLIC_JOIN_URL ?? 'https://papaya-given.mykajabi.com/offers/QzqH444d'
 
@@ -29,13 +32,15 @@ function LockOverlay({ label = 'Solo para miembros — Únete para desbloquear �
 export default async function HackPage() {
   const supabase = createAdminClient()
 
+  // No limit on products anymore — the hack portal grid scrolls and
+  // filters client-side so visitors can browse the full catalog.
   const [productsRes, campaignsRes, creatorsRes] = await Promise.all([
-    supabase.from('products').select('*').order('commission_rate', { ascending: false }).limit(6),
+    supabase.from('products').select('*').order('commission_rate', { ascending: false }),
     supabase.from('campaigns').select('*').eq('status', 'active').limit(4),
     supabase.from('creators').select('name, gmv').order('gmv', { ascending: false }).limit(5),
   ])
 
-  const products = productsRes.data ?? []
+  const products = (productsRes.data ?? []) as Product[]
   const campaigns = campaignsRes.data ?? []
   const topCreators = creatorsRes.data ?? []
 
@@ -90,37 +95,11 @@ export default async function HackPage() {
           </a>
         </div>
 
-        {/* Top Products */}
-        <section className="mb-12">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="font-playfair text-3xl text-brand-black">Productos top</h2>
-            <span className="font-dm-sans text-xs text-gray-400 bg-white border border-gray-100 px-3 py-1 rounded-full">{products.length} productos</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-            {products.map((p) => (
-              <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex flex-col gap-2">
-                {p.niche && (
-                  <span className="font-dm-sans text-xs font-medium bg-brand-light-pink text-brand-green px-2 py-0.5 rounded-full self-start">
-                    {p.niche}
-                  </span>
-                )}
-                {p.is_exclusive && (
-                  <span className="font-dm-sans text-xs font-bold bg-brand-black text-white px-2 py-0.5 rounded-full self-start tracking-wide">
-                    EXCLUSIVO
-                  </span>
-                )}
-                <p className="font-dm-sans font-semibold text-brand-black text-sm leading-snug">{p.name}</p>
-                <p className="font-dm-sans font-bold text-xl text-brand-pink leading-none">
-                  {p.commission_rate}%
-                </p>
-                <p className="font-dm-sans text-xs text-gray-400">Comisión</p>
-              </div>
-            ))}
-          </div>
-          {products.length === 0 && (
-            <p className="text-center text-gray-400 py-8 font-dm-sans">Productos próximamente.</p>
-          )}
-        </section>
+        {/* Full product grid with search + niche filter */}
+        <HackProductsSection products={products} />
+
+        {/* Papaya Picks locked teaser — converts visitors to members */}
+        <PapayaPicksTeaser joinUrl={JOIN_URL} loginUrl="/login" />
 
         {/* Campaigns */}
         <section className="mb-12">

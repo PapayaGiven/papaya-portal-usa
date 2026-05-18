@@ -3,10 +3,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
-import ProductCard from '@/components/ProductCard'
 import ProductRequestButton from '@/components/ProductRequestButton'
 import InitiationProductModal from '@/components/InitiationProductModal'
-import { Creator, Product } from '@/lib/types'
+import ProductsTabs from './ProductsTabs'
+import { Creator, Product, PapayaPick, CreatorLevel } from '@/lib/types'
+import { canSeePapayaPicks } from '@/lib/levelAccess'
 
 export default async function ProductsPage() {
   const supabase = await createClient()
@@ -64,6 +65,23 @@ export default async function ProductsPage() {
 
   const isInitiation = creator?.level === 'Initiation'
 
+  // Papaya Picks — second tab on this page, gated by level. Same query
+  // the standalone /papaya-picks page used to do.
+  const level = (creator?.level ?? 'Initiation') as CreatorLevel
+  const picksAccessible = canSeePapayaPicks(level)
+  let picks: PapayaPick[] = []
+  if (picksAccessible) {
+    const { data: picksData } = await admin
+      .from('papaya_picks')
+      .select('*')
+      .eq('is_active', true)
+      .order('papaya_pick_score', { ascending: false })
+    picks = ((picksData ?? []) as PapayaPick[]).filter((p) => {
+      if (!p.expires_at) return true
+      return new Date(p.expires_at) > new Date()
+    })
+  }
+
   return (
     <div className="min-h-screen bg-brand-light-pink">
       <Nav level={creator?.level ?? null} />
@@ -76,7 +94,7 @@ export default async function ProductsPage() {
       )}
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
             <Image
               src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/logo_pink.png"
@@ -96,23 +114,7 @@ export default async function ProductsPage() {
           <ProductRequestButton />
         </div>
 
-        {isInitiation && products.length === 0 && !showInitiationModal && (
-          <div className="bg-white rounded-2xl border border-brand-pink/20 p-10 text-center">
-            <p className="text-4xl mb-3">📦</p>
-            <h2 className="font-playfair text-2xl text-brand-black mb-2">Aún no has seleccionado productos.</h2>
-            <p className="font-dm-sans text-gray-500 text-sm">
-              No pudimos cargar tu selección. Por favor actualiza la página.
-            </p>
-          </div>
-        )}
-
-        {products.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        )}
+        <ProductsTabs products={products} picks={picks} picksAccessible={picksAccessible} />
       </main>
     </div>
   )

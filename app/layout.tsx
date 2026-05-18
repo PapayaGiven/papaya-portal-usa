@@ -39,7 +39,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className={`${playfair.variable} ${dmSans.variable}`}>
-      <body className="font-dm-sans antialiased bg-brand-light-pink min-h-screen">
+      <body className="font-dm-sans antialiased bg-brand-light-pink min-h-screen pb-20 md:pb-0">
         {children}
         <script dangerouslySetInnerHTML={{
           __html: `

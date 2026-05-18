@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Nav from '@/components/Nav'
 import DailyChecklist from '@/components/DailyChecklist'
 import StrategyTabs from '@/components/StrategyTabs'
+import ViolationModalTrigger from '@/components/ViolationModalTrigger'
 import { StrategyProduct, CreatorLevel, LevelConfig } from '@/lib/types'
 import { canSeeHashtags, canSeeExampleVideos } from '@/lib/levelAccess'
 
@@ -462,6 +463,9 @@ export default async function StrategyPage() {
             </p>
           </div>
         )}
+
+        {/* Subtle violation reporter — bottom of the page, opens a modal. */}
+        <ViolationModalTrigger />
       </main>
     </div>
   )
