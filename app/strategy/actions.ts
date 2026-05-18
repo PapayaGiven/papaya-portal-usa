@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 
 export async function toggleChecklistItem(
@@ -50,7 +51,11 @@ export async function logVideoPostedToday(input: {
   const tiktok = input.tiktokUrl.trim()
   if (!tiktok) return { error: 'TikTok URL required' }
 
-  const { error } = await supabase.from('creator_videos').insert({
+  // Use admin client for the insert — creator_videos has only a read
+  // policy for self, and creating a permissive insert RLS would be
+  // wider than necessary. Auth is already verified above.
+  const admin = createAdminClient()
+  const { error } = await admin.from('creator_videos').insert({
     creator_id: creator.id,
     product_id: input.productId,
     tiktok_url: tiktok,
@@ -62,7 +67,7 @@ export async function logVideoPostedToday(input: {
   // Mark today's checklist row as posted for this strategy product so the
   // existing /strategy weekly view stays in sync.
   const today = new Date().toISOString().split('T')[0]
-  await supabase
+  await admin
     .from('daily_checklist')
     .upsert(
       {
