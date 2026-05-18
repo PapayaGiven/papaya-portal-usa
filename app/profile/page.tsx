@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, TrendingUp, Trophy, Gift, MessagesSquare, GraduationCap, CalendarClock } from 'lucide-react'
+import { ChevronRight, TrendingUp, Trophy, MessagesSquare, GraduationCap, CalendarClock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import Nav from '@/components/Nav'
 import SignOutButton from './SignOutButton'
@@ -40,7 +40,8 @@ export default async function ProfilePage() {
   const bookingLink = creator.booking_link || settingsBooking || null
 
   const whatsappGroup = process.env.NEXT_PUBLIC_WHATSAPP_COMMUNITY_URL || 'https://wa.me/'
-  const kajabiUrl = process.env.NEXT_PUBLIC_KAJABI_URL || '#'
+  // Hard fallback so empty env vars don't produce a dead "#" link.
+  const kajabiUrl = process.env.NEXT_PUBLIC_KAJABI_URL || process.env.NEXT_PUBLIC_KAJABI_LINK || 'https://papaya-given.mykajabi.com'
 
   const levelStyle = LEVEL_BADGE_COLORS[creator.level] ?? LEVEL_BADGE_COLORS.Initiation
   const levelTarget = LEVEL_CONFIG[creator.level]?.target ?? null
@@ -77,8 +78,7 @@ export default async function ProfilePage() {
         {/* Menu list */}
         <section className="bg-white border border-gray-100 rounded-3xl overflow-hidden">
           <MenuItem href="/mi-crecimiento" icon={TrendingUp} label="Mi Crecimiento" hint="GMV mensual, comisiones, tracking" />
-          <MenuItem href="/mi-progreso" icon={Trophy} label="Mi Progreso" hint="Nivel actual + cómo avanzar" />
-          <MenuItem href="/mi-progreso#rewards" icon={Gift} label="Recompensas" hint="Lo que ya ganaste por subir de nivel" />
+          <MenuItem href="/mi-progreso" icon={Trophy} label="Mi Progreso & Recompensas" hint="Nivel actual + recompensas ganadas" />
           <MenuItem href={whatsappGroup} icon={MessagesSquare} label="Comunidad" hint="Grupo de WhatsApp Papaya Social Club" external />
           <MenuItem href={kajabiUrl} icon={GraduationCap} label="Educación" hint="Cursos, plantillas y guías en Kajabi" external />
           {bookingLink && (

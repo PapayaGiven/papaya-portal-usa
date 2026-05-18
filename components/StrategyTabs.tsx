@@ -3,15 +3,16 @@
 import { useState } from 'react'
 import { CreatorLevel } from '@/lib/types'
 import { hasCreativeBank } from '@/lib/levelAccess'
-import ContentCalendar from '@/components/ContentCalendar'
 import CreativeBank from '@/components/CreativeBank'
+import MyVideosLog, { type StrategyProductForLog } from '@/components/MyVideosLog'
+import type { VideoLogRow } from '@/app/strategy/actions'
 
 interface StrategyTabsProps {
   level: CreatorLevel
   productsContent: React.ReactNode
-  creatorId: string
-  weeklyChecklist: { date: string; completed: boolean; videos_done?: number }[]
-  levelConfigVideosPerDay: number
+  videoLogProducts: StrategyProductForLog[]
+  videoLogWeekStart: string
+  videoLogVideos: VideoLogRow[]
   creativeProducts: {
     id: string
     productName: string
@@ -21,19 +22,25 @@ interface StrategyTabsProps {
   }[]
 }
 
-export default function StrategyTabs({ level, productsContent, creatorId, weeklyChecklist, levelConfigVideosPerDay, creativeProducts }: StrategyTabsProps) {
-  const [activeTab, setActiveTab] = useState<'productos' | 'calendario' | 'banco'>('productos')
+export default function StrategyTabs({
+  level,
+  productsContent,
+  videoLogProducts,
+  videoLogWeekStart,
+  videoLogVideos,
+  creativeProducts,
+}: StrategyTabsProps) {
+  const [activeTab, setActiveTab] = useState<'productos' | 'videos' | 'banco'>('productos')
   const showCreativeBank = hasCreativeBank(level)
 
   const tabs = [
     { id: 'productos' as const, label: 'Productos' },
-    { id: 'calendario' as const, label: 'Calendario de contenido' },
+    { id: 'videos' as const, label: 'Mis videos' },
     { id: 'banco' as const, label: 'Banco creativo' },
   ]
 
   return (
     <div>
-      {/* Tab navigation */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-6">
         {tabs.map((tab) => (
           <button
@@ -51,16 +58,13 @@ export default function StrategyTabs({ level, productsContent, creatorId, weekly
         ))}
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'productos' && (
-        <div>{productsContent}</div>
-      )}
+      {activeTab === 'productos' && <div>{productsContent}</div>}
 
-      {activeTab === 'calendario' && (
-        <ContentCalendar
-          creatorId={creatorId}
-          weeklyChecklist={weeklyChecklist}
-          videosPerDay={levelConfigVideosPerDay}
+      {activeTab === 'videos' && (
+        <MyVideosLog
+          strategyProducts={videoLogProducts}
+          initialWeekStart={videoLogWeekStart}
+          initialVideos={videoLogVideos}
         />
       )}
 

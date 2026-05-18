@@ -53,6 +53,8 @@ export interface CreatorVideo {
   gmv_generated: number
   month: string
   notes: string | null
+  spark_code: string | null
+  video_notes: string | null
   created_at: string
   product?: { id: string; name: string } | null
 }

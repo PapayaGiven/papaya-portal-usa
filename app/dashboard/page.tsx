@@ -269,8 +269,11 @@ export default async function DashboardPage() {
   const fallbackBooking = (siteSettings?.[bookingLinkKey] as string | null | undefined) ?? null
   const bookingLink = creator?.booking_link || fallbackBooking || null
 
-  const whatsappCommunity = process.env.NEXT_PUBLIC_WHATSAPP_LINK ?? 'https://chat.whatsapp.com/EgJyUolGIcoIihVjjnuEKL'
-  const kajabiUrl = process.env.NEXT_PUBLIC_KAJABI_LINK ?? 'https://papaya-given.mykajabi.com'
+  const whatsappCommunity = process.env.NEXT_PUBLIC_WHATSAPP_LINK || 'https://chat.whatsapp.com/EgJyUolGIcoIihVjjnuEKL'
+  // Educación is a fixed brand destination. We keep the env override for
+  // staging flexibility but fall back hard so an empty env var doesn't
+  // produce a dead "#" link, which is what bit us in prod.
+  const kajabiUrl = process.env.NEXT_PUBLIC_KAJABI_LINK || process.env.NEXT_PUBLIC_KAJABI_URL || 'https://papaya-given.mykajabi.com'
 
   return (
     <div className="min-h-screen bg-brand-light-pink">

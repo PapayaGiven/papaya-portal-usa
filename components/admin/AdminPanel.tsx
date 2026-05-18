@@ -1060,7 +1060,7 @@ function CreatorCrecimiento({ creator, products, startTransition, isPending, fb 
             <table className="w-full text-xs font-dm-sans">
               <thead className="bg-gray-50">
                 <tr>
-                  {['URL', 'Producto', 'Estado', 'GMV', 'Fecha', ''].map((h) => (
+                  {['URL', 'Producto', 'Spark', 'Estado', 'GMV', 'Fecha', ''].map((h) => (
                     <th key={h} className="px-2 py-2 text-left text-[10px] text-gray-500 font-semibold uppercase">{h}</th>
                   ))}
                 </tr>
@@ -1068,8 +1068,9 @@ function CreatorCrecimiento({ creator, products, startTransition, isPending, fb 
               <tbody className="divide-y divide-gray-50">
                 {videos.map((v) => (
                   <tr key={v.id} className="hover:bg-gray-50/50">
-                    <td className="px-2 py-2"><a href={v.tiktok_url} target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline truncate inline-block max-w-[220px]">{v.tiktok_url}</a></td>
+                    <td className="px-2 py-2"><a href={v.tiktok_url} target="_blank" rel="noopener noreferrer" className="text-brand-green hover:underline truncate inline-block max-w-[220px]" title={v.video_notes ?? undefined}>{v.tiktok_url}</a></td>
                     <td className="px-2 py-2 text-gray-500">{v.product?.name ?? '—'}</td>
+                    <td className="px-2 py-2 text-gray-500 font-mono truncate max-w-[110px]" title={v.spark_code ?? undefined}>{v.spark_code ?? '—'}</td>
                     <td className="px-2 py-2"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${v.converted ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{v.converted ? 'Convertido' : 'Sin conversión'}</span></td>
                     <td className="px-2 py-2">${Number(v.gmv_generated).toLocaleString('en-US')}</td>
                     <td className="px-2 py-2 text-gray-400">{new Date(v.created_at).toLocaleDateString('es')}</td>

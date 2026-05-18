@@ -1,12 +1,11 @@
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import Nav from '@/components/Nav'
 import DailyChecklist from '@/components/DailyChecklist'
 import StrategyTabs from '@/components/StrategyTabs'
 import ViolationModalTrigger from '@/components/ViolationModalTrigger'
-import { StrategyProduct, CreatorLevel, LevelConfig } from '@/lib/types'
+import { StrategyProduct, CreatorLevel } from '@/lib/types'
 import { canSeeHashtags, canSeeExampleVideos } from '@/lib/levelAccess'
 
 const PRIORITY_STYLES = {
@@ -143,38 +142,26 @@ export default async function StrategyPage() {
     }
   }
 
-  // Fetch level_config for calendar
-  const admin = createAdminClient()
-  let levelConfigData: LevelConfig | null = null
-  if (creator) {
-    const { data: lcData } = await admin.from('level_config').select('*').eq('level_name', level).maybeSingle()
-    levelConfigData = lcData as LevelConfig | null
-  }
+  // Current week (Mon-Sun) — UTC bounds for the video log.
+  const now2 = new Date()
+  const day = now2.getUTCDay()
+  const diff = day === 0 ? -6 : 1 - day
+  const monday = new Date(Date.UTC(now2.getUTCFullYear(), now2.getUTCMonth(), now2.getUTCDate() + diff))
+  const sundayExclusive = new Date(monday)
+  sundayExclusive.setUTCDate(monday.getUTCDate() + 7)
+  const weekStartIso = monday.toISOString().split('T')[0]
 
-  // Fetch weekly calendar completions
-  const weeklyChecklist: { date: string; completed: boolean; videos_done?: number }[] = []
+  // Fetch the creator's videos for the visible week
+  let videoLogVideos: { id: string; product_id: string | null; tiktok_url: string; spark_code: string | null; video_notes: string | null; created_at: string }[] = []
   if (creator) {
-    const now2 = new Date()
-    const day = now2.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    const monday = new Date(now2)
-    monday.setDate(now2.getDate() + diff)
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-    const monStr = monday.toISOString().split('T')[0]
-    const sunStr = sunday.toISOString().split('T')[0]
-
-    const { data: calData } = await supabase
-      .from('daily_checklist')
-      .select('date, video_posted, videos_done')
+    const { data: vids } = await supabase
+      .from('creator_videos')
+      .select('id, product_id, tiktok_url, spark_code, video_notes, created_at')
       .eq('creator_id', creator.id)
-      .eq('strategy_product_id', '00000000-0000-0000-0000-000000000000')
-      .gte('date', monStr)
-      .lte('date', sunStr)
-
-    for (const row of calData ?? []) {
-      weeklyChecklist.push({ date: row.date, completed: row.video_posted, videos_done: (row as Record<string, unknown>).videos_done as number | undefined })
-    }
+      .gte('created_at', monday.toISOString())
+      .lt('created_at', sundayExclusive.toISOString())
+      .order('created_at', { ascending: true })
+    videoLogVideos = vids ?? []
   }
 
   // Creative bank data from strategy_products
@@ -243,9 +230,16 @@ export default async function StrategyPage() {
         {creator && (
           <StrategyTabs
             level={level}
-            creatorId={creator.id}
-            weeklyChecklist={weeklyChecklist}
-            levelConfigVideosPerDay={levelConfigData?.videos_per_day ?? 3}
+            videoLogWeekStart={weekStartIso}
+            videoLogVideos={videoLogVideos}
+            videoLogProducts={strategyProducts.map((sp) => ({
+              id: sp.id,
+              product: sp.product ? { id: (sp.product as { id: string }).id, name: (sp.product as { name: string }).name } : null,
+              external_product_name: sp.external_product_name ?? null,
+              videos_per_day: sp.videos_per_day,
+              frequency_type: ((sp.frequency_type as 'day' | 'week' | null | undefined) ?? 'day'),
+              priority: sp.priority,
+            }))}
             creativeProducts={creativeProducts}
             productsContent={
               (!strategyId || strategyProducts.length === 0) ? (
