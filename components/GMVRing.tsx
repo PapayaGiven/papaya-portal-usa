@@ -8,9 +8,14 @@ interface GMVRingProps {
   target: number
   level: string
   nextLevel: string | null
+  /**
+   * When `monthly`, the ring frames the target as "tu meta de este mes"
+   * and hides the level-up copy. Default `level` preserves legacy callers.
+   */
+  mode?: 'level' | 'monthly'
 }
 
-export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps) {
+export default function GMVRing({ gmv, target, level, nextLevel, mode = 'level' }: GMVRingProps) {
   const [animated, setAnimated] = useState(false)
 
   const radius = 70
@@ -37,7 +42,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
     <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
       <div className="flex flex-col items-center gap-1">
         <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">
-          Tu GMV
+          {mode === 'monthly' ? 'Tu meta de este mes' : 'Tu GMV'}
         </h3>
         <span className="font-dm-sans text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
           {level}
@@ -73,18 +78,22 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
       </div>
 
       <div className="text-center">
-        {nextLevel ? (
+        {mode === 'monthly' ? (
+          progress >= 1 ? (
+            <p className="font-dm-sans text-sm font-semibold text-brand-green">🎯 ¡Meta del mes alcanzada!</p>
+          ) : (
+            <p className="font-dm-sans text-sm text-gray-600">
+              <span className="font-semibold text-brand-green">{formatUsd(Math.max(remaining, 0))}</span>{' '}
+              más para tu meta de este mes
+            </p>
+          )
+        ) : nextLevel ? (
           <p className="font-dm-sans text-sm text-gray-600">
-            <span className="font-semibold text-brand-green">
-              {formatUsd(Math.max(remaining, 0))}
-            </span>{' '}
-            más para llegar a{' '}
-            <span className="font-semibold">{nextLevel}</span>
+            <span className="font-semibold text-brand-green">{formatUsd(Math.max(remaining, 0))}</span>{' '}
+            más para llegar a <span className="font-semibold">{nextLevel}</span>
           </p>
         ) : (
-          <p className="font-dm-sans text-sm text-amber-600 font-semibold">
-            🏆 ¡Nivel máximo alcanzado!
-          </p>
+          <p className="font-dm-sans text-sm text-amber-600 font-semibold">🏆 ¡Nivel máximo alcanzado!</p>
         )}
 
         <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5">
@@ -94,7 +103,7 @@ export default function GMVRing({ gmv, target, level, nextLevel }: GMVRingProps)
           />
         </div>
         <p className="text-xs text-gray-400 font-dm-sans mt-1">
-          {Math.round(progress * 100)}% al siguiente nivel
+          {Math.round(progress * 100)}% {mode === 'monthly' ? 'de tu meta' : 'al siguiente nivel'}
         </p>
       </div>
     </div>

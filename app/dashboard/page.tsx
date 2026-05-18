@@ -5,56 +5,75 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { Creator, Campaign, Product, LEVEL_CONFIG, LEVEL_BADGE_COLORS, StrategyProduct, SiteSettings, LevelConfig, PapayaPick } from '@/lib/types'
 import Nav from '@/components/Nav'
-import SmartBanner from '@/components/SmartBanner'
 import GMVRing from '@/components/GMVRing'
-import CampaignCard from '@/components/CampaignCard'
-import ProductCard from '@/components/ProductCard'
-import ProductRequestButton from '@/components/ProductRequestButton'
 import LevelUpCelebration from '@/components/LevelUpCelebration'
 import InitiationProductModal from '@/components/InitiationProductModal'
-import PersonalGoalNotes from '@/components/PersonalGoalNotes'
 import AnnouncementBanner from '@/components/AnnouncementBanner'
 import DashboardExtras from './DashboardExtras'
-import { canSeeCampaigns, hasAccountManager, hasEliteFeatures, hasDeliverables, getLevelIndex, canSeePapayaPicks } from '@/lib/levelAccess'
+import SmartAlert, { type Alert } from '@/components/SmartAlert'
+import VideoProgressBar from '@/components/VideoProgressBar'
+import DailyVideoPlan from '@/components/DailyVideoPlan'
+import { canSeeCampaigns, canSeePapayaPicks } from '@/lib/levelAccess'
 
-function computeBanner(
-  creator: Creator,
-  campaigns: Campaign[],
-  products: Product[]
-): { type: 'urgent' | 'products' | 'gmv'; title: string; message: string } | null {
+function dailyTargetForStrategyProduct(sp: { videos_per_day: number | null; frequency_type?: string | null }): number {
+  const raw = sp.videos_per_day ?? 0
+  if (raw <= 0) return 0
+  return sp.frequency_type === 'week' ? Math.max(1, Math.ceil(raw / 7)) : raw
+}
+
+function pickAlert(input: {
+  campaigns: Campaign[]
+  creator: Creator
+  monthlyGoal: number
+  papayaPicks: PapayaPick[]
+  canSeePicks: boolean
+}): Alert | null {
+  const { campaigns, creator, monthlyGoal, papayaPicks, canSeePicks } = input
   const now = new Date()
 
-  const urgentCampaign = campaigns.find((c) => {
-    if (!c.deadline) return false
-    const deadline = new Date(c.deadline)
-    return deadline.getTime() - now.getTime() < 24 * 60 * 60 * 1000 && deadline > now
-  })
-  if (urgentCampaign) {
+  // 1. Campaign closing in < 48h — highest priority
+  const horizon = 48 * 60 * 60 * 1000
+  const closing = campaigns
+    .filter((c) => {
+      if (!c.deadline) return false
+      const ms = new Date(c.deadline).getTime() - now.getTime()
+      return ms > 0 && ms < horizon
+    })
+    .sort((a, b) => new Date(a.deadline!).getTime() - new Date(b.deadline!).getTime())[0]
+  if (closing) {
+    const hours = Math.max(1, Math.round((new Date(closing.deadline!).getTime() - now.getTime()) / (60 * 60 * 1000)))
     return {
-      type: 'urgent',
-      title: '¡Campaña por terminar!',
-      message: `${urgentCampaign.brand_name} cierra en menos de 24 horas. ¡Aplica ahora!`,
+      kind: 'campaign',
+      title: 'Campaña por cerrar',
+      message: `${closing.brand_name} cierra en ${hours}h. Aplica antes que se acabe.`,
+      href: `/campaigns/${closing.id}`,
+      cta: 'Aplicar →',
     }
   }
 
-  const highCommProduct = products.find(
-    (p) => p.commission_rate !== null && p.commission_rate > 25
-  )
-  if (highCommProduct) {
-    return {
-      type: 'products',
-      title: '¡Producto top disponible!',
-      message: `${highCommProduct.name} ofrece ${highCommProduct.commission_rate}% de comisión. ¡Empieza a promover!`,
+  // 2. GMV behind goal past day 15
+  if (now.getUTCDate() >= 15 && monthlyGoal > 0) {
+    const ratio = creator.gmv / monthlyGoal
+    if (ratio < 0.7) {
+      return {
+        kind: 'gmv-behind',
+        title: 'Estás por debajo de tu meta',
+        message: 'Estás por debajo de tu meta — replica tu mejor video o pide ayuda a tu manager.',
+        href: '/strategy',
+        cta: 'Ver estrategia →',
+      }
     }
   }
 
-  const remaining = creator.gmv_target - creator.gmv
-  if (remaining > 0 && remaining < 100) {
-    const config = LEVEL_CONFIG[creator.level]
+  // 3. New Papaya Pick — Foundation+
+  if (canSeePicks && papayaPicks.length > 0) {
+    const top = papayaPicks[0]
     return {
-      type: 'gmv',
-      title: '¡Casi llegas!',
-      message: `Solo $${remaining.toFixed(0)} más para llegar a ${config.next ?? 'Elite'}. ¡Sigue así!`,
+      kind: 'papaya-pick',
+      title: 'Nueva Papaya Pick',
+      message: `Nueva Papaya Pick disponible — ${top.product_name} tiene alto potencial esta semana.`,
+      href: '/papaya-picks',
+      cta: 'Ver Papaya Picks →',
     }
   }
 
@@ -77,7 +96,7 @@ export default async function DashboardPage() {
   const level = creator?.level ?? 'Initiation'
   const isInitiation = level === 'Initiation'
 
-  // Fetch active campaigns (only for Foundation+)
+  // Active campaigns (Foundation+)
   let campaigns: Campaign[] = []
   if (creator && canSeeCampaigns(level)) {
     const { data: campaignsData } = await supabase
@@ -88,21 +107,18 @@ export default async function DashboardPage() {
     campaigns = (campaignsData ?? []) as Campaign[]
   }
 
-  // Fetch products
   const admin = createAdminClient()
   let products: Product[] = []
   let initiationModalProducts: Product[] = []
   let showInitiationModal = false
 
   if (creator && isInitiation) {
-    // Check if they've selected products
     const { data: selections } = await supabase
       .from('creator_initiation_products')
       .select('product_id')
       .eq('creator_id', creator.id)
 
     if (!selections || selections.length === 0) {
-      // Show modal
       showInitiationModal = true
       const { data: approved } = await admin
         .from('products')
@@ -124,12 +140,10 @@ export default async function DashboardPage() {
     products = (all ?? []) as Product[]
   }
 
-  // Strategy recap
+  // Strategy products for "Tu plan de hoy"
   const now = new Date()
   const monthDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-  const monthLabel = now.toLocaleDateString('es-US', { month: 'long', year: 'numeric' })
   let strategyProducts: StrategyProduct[] = []
-
   if (creator) {
     const { data: stratData } = await supabase
       .from('strategies')
@@ -137,43 +151,56 @@ export default async function DashboardPage() {
       .eq('creator_id', creator.id)
       .eq('month', monthDate)
       .maybeSingle()
-
     if (stratData) {
       const { data: spData } = await supabase
         .from('strategy_products')
         .select('*, product:products(id, name, commission_rate)')
         .eq('strategy_id', stratData.id)
         .order('created_at')
-        .limit(4)
       strategyProducts = (spData ?? []) as StrategyProduct[]
     }
   }
 
-  // Fetch settings for booking
+  // Settings (booking links + agency goal)
   const { data: settingsData } = await admin.from('settings').select('*').limit(1).maybeSingle()
   const siteSettings = settingsData as SiteSettings | null
 
-  // Fetch level_config for daily video plan
+  // Level config (fallback for daily video target)
   let levelConfigData: LevelConfig | null = null
   if (creator) {
     const { data: lcData } = await admin.from('level_config').select('*').eq('level_name', creator.level).maybeSingle()
     levelConfigData = lcData as LevelConfig | null
   }
 
-  // Fetch deliverables count for Scale/Elite
-  let deliverablesCount = 0
-  if (creator && hasDeliverables(level)) {
-    const { count } = await supabase
-      .from('deliverables')
-      .select('*', { count: 'exact', head: true })
+  // Videos posted today — count + by-product breakdown
+  let videosToday = 0
+  const completedByProductId: Record<string, number> = {}
+  if (creator) {
+    const today = new Date()
+    const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString()
+    const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1)).toISOString()
+    const { data: vids } = await supabase
+      .from('creator_videos')
+      .select('product_id')
       .eq('creator_id', creator.id)
-    deliverablesCount = count ?? 0
+      .gte('created_at', start)
+      .lt('created_at', end)
+    for (const v of vids ?? []) {
+      videosToday++
+      if (v.product_id) completedByProductId[v.product_id] = (completedByProductId[v.product_id] ?? 0) + 1
+    }
   }
 
-  // Inbox + open deliverables for the DashboardExtras banner/card. RLS on
-  // both tables scopes the rows to the signed-in creator. The deliverables
-  // policy was added in migration 015 — if the migration hasn't been
-  // applied yet, the query returns 0 rows instead of erroring.
+  // Daily video target Y — sum strategy or fall back to level config
+  const strategyTarget = strategyProducts.reduce(
+    (sum, sp) => sum + dailyTargetForStrategyProduct(sp),
+    0,
+  )
+  const dailyVideoTarget = strategyTarget > 0
+    ? strategyTarget
+    : (creator?.custom_videos_per_day ?? levelConfigData?.videos_per_day ?? 0)
+
+  // Inbox + open deliverables
   type NotifRow = { id: string; title: string; message: string | null; type: string | null; created_at: string }
   type DeliverableForCreator = { id: string; brand_name: string; deliverable_type: string; due_date: string | null; status: string; notes: string | null }
   let unreadNotifications: NotifRow[] = []
@@ -199,65 +226,72 @@ export default async function DashboardPage() {
     openDeliverables = (dlvRes.data ?? []) as DeliverableForCreator[]
   }
 
-  // Fetch active announcements
-  const { data: announcementsData } = await admin.from('announcements').select('*').eq('is_active', true).order('created_at', { ascending: false }).limit(5)
+  const { data: announcementsData } = await admin
+    .from('announcements')
+    .select('*')
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(5)
   const activeAnnouncements = (announcementsData ?? []) as { id: string; title: string; body: string | null; image_url: string | null; created_at: string }[]
 
-  const totalVideosPerDay = strategyProducts.reduce((sum, p) => sum + (p.videos_per_day ?? 0), 0)
-  const topStratProducts = strategyProducts
-    .sort((a, b) => {
-      const order = { Hero: 0, Secondary: 1, Supporting: 2 }
-      return (order[a.priority] ?? 9) - (order[b.priority] ?? 9)
-    })
-    .slice(0, 2)
-
-  // Fetch top Papaya Picks for Foundation+
-  let papayaPicksTop: PapayaPick[] = []
-  if (creator && canSeePapayaPicks(level)) {
+  // Papaya Picks for the smart alert
+  const canSeePicks = creator ? canSeePapayaPicks(level) : false
+  let papayaPicks: PapayaPick[] = []
+  if (creator && canSeePicks) {
     const { data: picksData } = await admin
       .from('papaya_picks')
       .select('*')
       .eq('is_active', true)
       .order('papaya_pick_score', { ascending: false })
-      .limit(2)
-    papayaPicksTop = ((picksData ?? []) as PapayaPick[]).filter((p) => !p.expires_at || new Date(p.expires_at) > new Date())
+      .limit(3)
+    papayaPicks = ((picksData ?? []) as PapayaPick[]).filter((p) => !p.expires_at || new Date(p.expires_at) > new Date())
   }
 
-  const banner = creator ? computeBanner(creator, campaigns, products) : null
-  const levelConfig = creator ? LEVEL_CONFIG[creator.level] : null
+  // Monthly goal: prefer personal, fall back to level threshold
   const personalGoal = creator?.personal_gmv_goal ?? 0
-  const personalProgress = personalGoal > 0 ? Math.min((creator?.gmv ?? 0) / personalGoal, 1) : 0
+  const fallbackLevelGoal = creator ? (LEVEL_CONFIG[creator.level].target ?? creator.gmv_target) : 0
+  const monthlyGoal = personalGoal > 0 ? personalGoal : fallbackLevelGoal
+
+  const alert = creator
+    ? pickAlert({ campaigns, creator, monthlyGoal, papayaPicks, canSeePicks })
+    : null
+
+  // Top 2 products by commission
+  const topTwoProducts = [...products]
+    .filter((p) => p.commission_rate != null)
+    .sort((a, b) => (b.commission_rate ?? 0) - (a.commission_rate ?? 0))
+    .slice(0, 2)
+
   const firstName = creator?.name?.split(' ')[0] ?? null
+
+  // Booking link
+  const bookingLinkKey = `booking_link_${level.toLowerCase()}` as keyof SiteSettings
+  const fallbackBooking = (siteSettings?.[bookingLinkKey] as string | null | undefined) ?? null
+  const bookingLink = creator?.booking_link || fallbackBooking || null
+
+  const whatsappCommunity = process.env.NEXT_PUBLIC_WHATSAPP_LINK ?? 'https://chat.whatsapp.com/EgJyUolGIcoIihVjjnuEKL'
+  const kajabiUrl = process.env.NEXT_PUBLIC_KAJABI_LINK ?? 'https://papaya-given.mykajabi.com'
 
   return (
     <div className="min-h-screen bg-brand-light-pink">
       <Nav level={creator?.level ?? null} />
 
-      {/* Level-up celebration (client component) */}
-      {creator && (
-        <LevelUpCelebration creatorId={creator.id} currentLevel={creator.level} />
-      )}
+      {creator && <LevelUpCelebration creatorId={creator.id} currentLevel={creator.level} />}
 
-      {/* Initiation product selection modal */}
       {showInitiationModal && creator && initiationModalProducts.length > 0 && (
-        <InitiationProductModal
-          products={initiationModalProducts}
-          creatorId={creator.id}
-        />
+        <InitiationProductModal products={initiationModalProducts} creatorId={creator.id} />
       )}
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Inbox notifications + open deliverables. Self-hides when both
-            arrays are empty so it doesn't leave a gap at the top. */}
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <DashboardExtras notifications={unreadNotifications} deliverables={openDeliverables} />
 
-        {/* Greeting row */}
-        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        {/* 1. Header */}
+        <header className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <Image
             src="https://nptkinihgouicdimytbf.supabase.co/storage/v1/object/public/PSC%20LOGOS/Sun_pink.png"
             alt=""
-            width={180}
-            height={180}
+            width={140}
+            height={140}
             className="absolute right-0 top-1/2 -translate-y-1/2 opacity-10 pointer-events-none select-none"
             aria-hidden="true"
           />
@@ -269,92 +303,24 @@ export default async function DashboardPage() {
               {now.toLocaleDateString('es-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
             </p>
           </div>
-
           {creator && (
             <div className="flex items-center gap-2">
               <span className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">Level</span>
               <span
                 className="font-dm-sans font-bold text-sm px-3 py-1 rounded-full"
-                style={{ backgroundColor: LEVEL_BADGE_COLORS[creator.level]?.bg ?? '#F1EFE8', color: LEVEL_BADGE_COLORS[creator.level]?.text ?? '#444441' }}
+                style={{
+                  backgroundColor: LEVEL_BADGE_COLORS[creator.level]?.bg ?? '#F1EFE8',
+                  color: LEVEL_BADGE_COLORS[creator.level]?.text ?? '#444441',
+                }}
               >
                 {creator.level}
               </span>
             </div>
           )}
-        </div>
+        </header>
 
-        {/* Papaya Picks highlight (Foundation+) */}
-        {papayaPicksTop.length > 0 && (
-          <section className="mb-6 bg-gradient-to-r from-brand-pink/15 via-white to-brand-green/10 border border-brand-pink/20 rounded-3xl p-5">
-            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-              <div>
-                <h2 className="font-playfair text-2xl text-brand-black">🌟 Papaya Picks</h2>
-                <p className="font-dm-sans text-xs text-gray-500">Oportunidades exclusivas — alta demanda, poca competencia.</p>
-              </div>
-              <a href="/papaya-picks" className="font-dm-sans text-xs font-semibold text-brand-green hover:underline">Ver todos →</a>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {papayaPicksTop.map((p) => {
-                const score = Number(p.papaya_pick_score) || 0
-                const isHot = score > 70
-                const isGood = score >= 50 && score <= 70
-                return (
-                  <div key={p.id} className="bg-white rounded-2xl border border-brand-pink/20 p-4 flex gap-3">
-                    <div className="w-20 h-20 rounded-xl bg-brand-light-pink/40 shrink-0 overflow-hidden flex items-center justify-center text-3xl">
-                      {p.product_image_url
-                        ? // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.product_image_url} alt={p.product_name} className="w-full h-full object-cover" />
-                        : '🌟'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-playfair text-base text-brand-black leading-tight truncate">{p.product_name}</h3>
-                        {(isHot || isGood) && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${isHot ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {isHot ? '🔥 Hot' : '⭐ Good'}
-                          </span>
-                        )}
-                      </div>
-                      {p.brand_name && <p className="text-xs text-gray-400">{p.brand_name}</p>}
-                      <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{p.units_sold_this_week.toLocaleString('en-US')} unidades esta semana</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700">+{Number(p.growth_percentage).toFixed(0)}% crecimiento</span>
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-brand-pink/20 text-brand-pink">Solo {p.affiliates_count} afiliadas</span>
-                      </div>
-                      {p.commission_rate != null && (
-                        <p className="text-xs font-bold text-brand-pink mt-1.5">{p.commission_rate}% Comisión</p>
-                      )}
-                      {p.why_its_a_pick && (
-                        <p className="text-[11px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2 line-clamp-2"><b>Por qué ahora:</b> {p.why_its_a_pick}</p>
-                      )}
-                      {p.sample_link && (
-                        <a href={p.sample_link} target="_blank" rel="noopener noreferrer" className="block text-center text-[11px] font-semibold text-white bg-brand-green px-2.5 py-1 rounded-lg hover:bg-brand-green/90 transition mt-2">Solicitar muestra →</a>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )}
-
-        {/* Smart Banner */}
-        {banner && (
-          <div className="mb-6">
-            <SmartBanner banner={banner} />
-          </div>
-        )}
-
-        {/* Announcements */}
-        {activeAnnouncements.length > 0 && (
-          <div className="mb-6">
-            <AnnouncementBanner announcements={activeAnnouncements} />
-          </div>
-        )}
-
-        {/* No creator account yet */}
         {!creator && (
-          <div className="bg-white rounded-2xl border border-brand-pink/20 p-8 text-center mb-6">
+          <div className="bg-white rounded-2xl border border-brand-pink/20 p-8 text-center">
             <p className="text-4xl mb-3">🌴</p>
             <h2 className="font-playfair text-2xl text-brand-black mb-2">Tu perfil se está configurando.</h2>
             <p className="font-dm-sans text-gray-500 text-sm">Tu agencia activará tu perfil de creadora pronto.</p>
@@ -363,402 +329,145 @@ export default async function DashboardPage() {
 
         {creator && (
           <>
-            {/* Strategy + Community + Education */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-              {/* Strategy Recap */}
-              <div className="sm:col-span-1 bg-white rounded-2xl border border-brand-pink/20 p-5 flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-gray-400">Mi Estrategia</h3>
-                    <span className="font-dm-sans text-xs text-gray-400">{monthLabel}</span>
-                  </div>
-                  {strategyProducts.length > 0 ? (
-                    <div className="space-y-2">
-                      {topStratProducts.map((sp) => {
-                        const prod = sp.product as { name: string } | null
-                        return (
-                          <div key={sp.id} className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${sp.priority === 'Hero' ? 'bg-amber-400' : 'bg-brand-pink'}`} />
-                            <span className="font-dm-sans text-sm text-brand-black truncate">{prod?.name ?? '–'}</span>
-                          </div>
-                        )
-                      })}
-                      {totalVideosPerDay > 0 && (
-                        <p className="font-dm-sans text-xs text-gray-400 mt-2">
-                          {totalVideosPerDay} videos/día en total
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="font-dm-sans text-sm text-gray-400">Aún no hay estrategia para este mes.</p>
-                  )}
-                </div>
-                <Link href="/strategy" className="mt-4 font-dm-sans text-xs font-semibold text-brand-green hover:underline">
-                  Ver estrategia completa →
-                </Link>
-              </div>
-
-              {/* Community */}
-              <a
-                href={process.env.NEXT_PUBLIC_WHATSAPP_LINK ?? 'https://chat.whatsapp.com/EgJyUolGIcoIihVjjnuEKL'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-brand-pink/10 hover:bg-brand-pink/20 border border-brand-pink/30 rounded-2xl p-5 flex flex-col justify-between transition group"
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-brand-pink/20 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-brand-black" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                    </svg>
-                  </div>
-                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Comunidad</h3>
-                  <p className="font-dm-sans text-xs text-gray-500">Grupo de WhatsApp para creadoras Papaya</p>
-                </div>
-                <span className="mt-3 font-dm-sans text-xs font-semibold text-brand-pink group-hover:underline">
-                  Unirse al grupo →
-                </span>
-              </a>
-
-              {/* Education */}
-              <a
-                href={process.env.NEXT_PUBLIC_KAJABI_LINK ?? 'https://papaya-given.mykajabi.com'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-brand-green/5 hover:bg-brand-green/10 border border-brand-green/20 rounded-2xl p-5 flex flex-col justify-between transition group"
-              >
-                <div>
-                  <div className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center mb-3">
-                    <svg className="w-5 h-5 text-brand-green" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                  </div>
-                  <h3 className="font-dm-sans font-semibold text-sm text-brand-black mb-1">Educación</h3>
-                  <p className="font-dm-sans text-xs text-gray-500">Entrenamientos y recursos para triunfar en TikTok</p>
-                </div>
-                <span className="mt-3 font-dm-sans text-xs font-semibold text-brand-green group-hover:underline">
-                  Ver cursos →
-                </span>
-              </a>
-            </div>
-
-            {/* Tu plan de hoy */}
-            {creator && levelConfigData && (
-              (() => {
-                const videosPerDay = creator.custom_videos_per_day ?? levelConfigData.videos_per_day
-                const heroVideos = levelConfigData.hero_products * levelConfigData.hero_videos_each
-                const subHeroVideos = levelConfigData.sub_hero_products * levelConfigData.sub_hero_videos_each
-                const levelIdx = getLevelIndex(level)
-                const showSubHero = levelIdx >= 3 // Scale+
-                const showComplementary = levelIdx >= 1 // Foundation+
-                const showWinners = levelIdx >= 4 // Elite
-                return (
-                  <div className="bg-white rounded-2xl border border-brand-pink/20 p-6 mb-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-xl">🎬</div>
-                      <div>
-                        <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Tu plan de hoy</h3>
-                        <p className="font-dm-sans text-xs text-gray-400">Basado en tu nivel {creator.level}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-baseline gap-2 mb-4">
-                      <span className="font-playfair text-4xl font-bold text-brand-black">{videosPerDay}</span>
-                      <span className="font-dm-sans text-sm text-gray-500">videos hoy</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between font-dm-sans text-sm">
-                        <span className="text-gray-600">Hero: {levelConfigData.hero_products} productos × {levelConfigData.hero_videos_each} videos</span>
-                        <span className="font-semibold text-brand-black">= {heroVideos} videos</span>
-                      </div>
-                      {showSubHero && subHeroVideos > 0 && (
-                        <div className="flex items-center justify-between font-dm-sans text-sm">
-                          <span className="text-gray-600">Sub-hero: {levelConfigData.sub_hero_products} productos × {levelConfigData.sub_hero_videos_each} videos</span>
-                          <span className="font-semibold text-brand-black">= {subHeroVideos} videos</span>
-                        </div>
-                      )}
-                      {showComplementary && levelConfigData.complementary_videos > 0 && (
-                        <div className="flex items-center justify-between font-dm-sans text-sm">
-                          <span className="text-gray-600">Complementarios</span>
-                          <span className="font-semibold text-brand-black">= {levelConfigData.complementary_videos} videos</span>
-                        </div>
-                      )}
-                      {showWinners && levelConfigData.winner_videos > 0 && (
-                        <div className="flex items-center justify-between font-dm-sans text-sm">
-                          <span className="text-gray-600">Re-amplificación de ganadores</span>
-                          <span className="font-semibold text-brand-black">= {levelConfigData.winner_videos} videos</span>
-                        </div>
-                      )}
-                    </div>
-                    {creator.custom_videos_per_day != null && (
-                      <p className="font-dm-sans text-xs text-amber-600 mt-3">* Videos por día personalizado por tu agencia</p>
-                    )}
-                  </div>
-                )
-              })()
+            {activeAnnouncements.length > 0 && (
+              <AnnouncementBanner announcements={activeAnnouncements} />
             )}
 
-            {/* Mis entregas — Scale/Elite only */}
-            {creator && hasDeliverables(level) && (
-              <div className="mb-6">
-                <Link
-                  href="/deliverables"
-                  className="bg-white rounded-2xl border border-brand-pink/20 p-5 flex items-center gap-4 hover:shadow-sm transition group"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-xl">📦</div>
-                  <div className="flex-1">
-                    <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Mis entregas</h3>
-                    <p className="font-dm-sans text-xs text-gray-400">{deliverablesCount} entrega{deliverablesCount !== 1 ? 's' : ''} activas</p>
-                  </div>
-                  <span className="font-dm-sans text-xs font-semibold text-brand-green group-hover:underline">Ver todas →</span>
-                </Link>
-              </div>
-            )}
+            {/* 2. GMV ring — toward monthly goal */}
+            <GMVRing
+              gmv={creator.gmv}
+              target={monthlyGoal}
+              level={creator.level}
+              nextLevel={null}
+              mode="monthly"
+            />
 
-            {/* GMV Ring + Personal Goal / Account Manager / Elite */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <GMVRing
-                gmv={creator.gmv}
-                target={creator.gmv_target}
-                level={creator.level}
-                nextLevel={levelConfig?.next ?? null}
-              />
+            {/* 3. Videos progress bar */}
+            <VideoProgressBar done={videosToday} target={dailyVideoTarget} />
 
-              {/* Elite: Mastermind + WhatsApp */}
-              {hasEliteFeatures(level) ? (
-                <div className="flex flex-col gap-4">
-                  {creator.account_manager_name && (
-                    <div className="bg-white rounded-2xl border border-amber-200/60 p-5 flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-amber-50 flex items-center justify-center text-2xl shrink-0">👑</div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-amber-600 mb-0.5">Tu Account Manager</p>
-                        <p className="font-dm-sans font-semibold text-brand-black">{creator.account_manager_name}</p>
-                        {creator.account_manager_whatsapp && (
-                          <a
-                            href={`https://wa.me/${creator.account_manager_whatsapp.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 mt-2 font-dm-sans text-sm font-semibold text-brand-green hover:underline"
-                          >
-                            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                            </svg>
-                            Escribe por WhatsApp
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  )}
+            {/* 4. Tu plan de hoy — strategy as checklist */}
+            <DailyVideoPlan
+              items={strategyProducts.map((sp) => ({
+                id: sp.id,
+                product: sp.product ? { id: sp.product.id, name: sp.product.name } : null,
+                videos_per_day: sp.videos_per_day,
+                frequency_type: (sp.frequency_type ?? 'day') as 'day' | 'week',
+                priority: sp.priority,
+              }))}
+              completedByProductId={completedByProductId}
+            />
 
-                  {creator.mastermind_date && (
-                    <div className="bg-white rounded-2xl border border-amber-200/60 p-5">
-                      <p className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-amber-600 mb-1">Próximo Mastermind</p>
-                      <p className="font-playfair text-xl text-brand-black">
-                        {new Date(creator.mastermind_date).toLocaleDateString('es-US', {
-                          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : hasAccountManager(level) ? (
-                /* Growth+: Account Manager card */
-                <div className="bg-white rounded-2xl border border-brand-green/20 p-6 flex flex-col gap-4">
-                  <div>
-                    <p className="font-dm-sans text-xs font-semibold uppercase tracking-widest text-brand-green mb-1">Tu Account Manager</p>
-                    {creator.account_manager_name ? (
-                      <>
-                        <p className="font-playfair text-2xl text-brand-black">{creator.account_manager_name}</p>
-                        {creator.account_manager_whatsapp && (
-                          <a
-                            href={`https://wa.me/${creator.account_manager_whatsapp.replace(/\D/g, '')}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 mt-2 font-dm-sans text-sm font-semibold text-brand-green hover:underline"
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                            </svg>
-                            Message on WhatsApp
-                          </a>
-                        )}
-                      </>
-                    ) : (
-                      <p className="font-dm-sans text-sm text-gray-400">Tu manager será asignado pronto.</p>
-                    )}
-                  </div>
-                  <div className="mt-auto pt-3 border-t border-gray-50">
-                    <p className="font-dm-sans text-xs text-gray-400">Beneficio Growth: llamadas de estrategia 1:1 mensuales incluidas.</p>
-                  </div>
-                </div>
-              ) : (
-                /* Initiation / Foundation: Personal Goal Card */
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-4">
-                  <div className="flex flex-col items-center gap-1">
-                    <h3 className="font-dm-sans font-semibold text-gray-500 text-xs uppercase tracking-wider">Mi meta personal</h3>
-                    <span className="font-dm-sans text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">Meta autoestablecida</span>
-                  </div>
+            {/* 5. Smart alert — one most urgent */}
+            {alert && <SmartAlert alert={alert} />}
 
-                  {personalGoal > 0 ? (
-                    <>
-                      <div className="relative" style={{ width: 180, height: 180 }}>
-                        <svg width="180" height="180" className="rotate-[-90deg]">
-                          <circle cx="90" cy="90" r="70" fill="none" stroke="#F3F4F6" strokeWidth="12" />
-                          <circle
-                            cx="90"
-                            cy="90"
-                            r="70"
-                            fill="none"
-                            stroke="#1B5E3B"
-                            strokeWidth="12"
-                            strokeLinecap="round"
-                            strokeDasharray={2 * Math.PI * 70}
-                            strokeDashoffset={2 * Math.PI * 70 * (1 - personalProgress)}
-                            style={{ transition: 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)' }}
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="font-dm-sans font-bold text-2xl text-brand-black leading-none">
-                            ${creator.gmv.toLocaleString('en-US')}
-                          </span>
-                          <span className="font-dm-sans text-xs text-gray-400 mt-1">
-                            of ${personalGoal.toLocaleString('en-US')}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-dm-sans text-sm text-gray-600">
-                          {personalProgress >= 1 ? (
-                            <span className="font-semibold text-brand-green">🎯 ¡Meta personal alcanzada!</span>
-                          ) : (
-                            <>
-                              <span className="font-semibold text-brand-green">
-                                ${Math.max(personalGoal - creator.gmv, 0).toLocaleString('en-US')}
-                              </span>{' '}
-                              más para alcanzar tu meta
-                            </>
-                          )}
-                        </p>
-                        <div className="mt-3 w-full bg-gray-100 rounded-full h-1.5">
-                          <div
-                            className="h-1.5 rounded-full bg-brand-green transition-all duration-1000"
-                            style={{ width: `${Math.min(personalProgress * 100, 100)}%` }}
-                          />
-                        </div>
-                        <p className="text-xs text-gray-400 font-dm-sans mt-1">
-                          {Math.round(personalProgress * 100)}% de tu meta personal
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center py-4">
-                      <p className="text-4xl mb-3">🎯</p>
-                      <p className="font-dm-sans text-sm text-gray-500 mb-1">Aún no tienes una meta personal.</p>
-                      <p className="font-dm-sans text-xs text-gray-400">Pídele a tu agencia que establezca una meta de GMV para ti.</p>
-                    </div>
-                  )}
-                  <PersonalGoalNotes initialNotes={creator.personal_goal_notes} />
-                </div>
-              )}
-            </div>
-
-            {/* 1:1 Booking Card */}
-            {(() => {
-              const callsKey = `calls_per_month_${level.toLowerCase()}` as keyof SiteSettings
-              const callsPerMonth = (siteSettings?.[callsKey] as number) ?? 0
-              const bookingLinkKey = `booking_link_${level.toLowerCase()}` as keyof SiteSettings
-              const defaultBookingLink = (siteSettings?.[bookingLinkKey] as string) ?? null
-              const personalLink = creator.booking_link
-              const bookingLink = personalLink || defaultBookingLink
-              const isLocked = level === 'Initiation' || level === 'Foundation'
-
-              return (
-                <div className="mb-8">
-                  <div className="bg-white rounded-2xl border border-brand-pink/20 p-6">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-brand-green/10 flex items-center justify-center text-xl">📞</div>
-                      <div>
-                        <h3 className="font-dm-sans font-semibold text-sm text-brand-black">Reserva tu llamada 1:1</h3>
-                        {!isLocked && callsPerMonth > 0 && (
-                          <p className="font-dm-sans text-xs text-gray-500">
-                            Tienes derecho a {callsPerMonth} llamada{callsPerMonth > 1 ? 's' : ''} 1:1 por mes
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {isLocked ? (
-                      <div className="bg-gray-50 rounded-xl px-4 py-3">
-                        <p className="font-dm-sans text-sm text-gray-400 flex items-center gap-2">
-                          <span>🔒</span>
-                          {level === 'Initiation'
-                            ? 'Las llamadas 1:1 se desbloquean en Growth'
-                            : 'Disponible a partir de Growth'}
-                        </p>
-                      </div>
-                    ) : bookingLink ? (
-                      <a
-                        href={bookingLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 font-dm-sans text-sm font-semibold bg-brand-green text-white px-5 py-3 rounded-xl hover:bg-brand-green/90 transition"
-                      >
-                        Agendar llamada →
-                      </a>
-                    ) : (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                        <p className="font-dm-sans text-sm text-amber-700">
-                          Tu link de agendamiento estará disponible pronto
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Campaigns (Foundation+ only) */}
-            {canSeeCampaigns(level) && (
-              <section className="mb-8">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-playfair text-2xl text-brand-black">Campañas activas</h2>
-                  <Link href="/campaigns" className="font-dm-sans text-sm text-brand-green hover:underline">
-                    Ver todas →
+            {/* 6. Top productos — 2 cards */}
+            {topTwoProducts.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-playfair text-xl text-brand-black">Top productos</h2>
+                  <Link href="/products" className="font-dm-sans text-sm text-brand-green hover:underline">
+                    Ver todos →
                   </Link>
                 </div>
-                {campaigns.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {campaigns.slice(0, 2).map((campaign) => (
-                      <CampaignCard key={campaign.id} campaign={campaign} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-                    <p className="font-dm-sans text-sm text-gray-400">No hay campañas activas en este momento.</p>
-                  </div>
-                )}
-              </section>
-            )}
-
-            {/* Products */}
-            {products.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-playfair text-2xl text-brand-black">
-                    {isInitiation ? 'Tus productos' : 'Productos top'}
-                  </h2>
-                  <div className="flex items-center gap-3">
-                    <Link href="/products" className="font-dm-sans text-sm text-brand-green hover:underline">
-                      {isInitiation ? 'Gestionar productos →' : 'Todos los productos →'}
+                <div className="grid grid-cols-2 gap-3">
+                  {topTwoProducts.map((p) => (
+                    <Link
+                      key={p.id}
+                      href="/products"
+                      className="bg-white border border-gray-100 rounded-2xl p-3 flex flex-col gap-2 hover:shadow-sm transition"
+                    >
+                      <div className="aspect-square bg-gray-50 rounded-xl overflow-hidden">
+                        {p.image_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-2xl">🛍️</div>
+                        )}
+                      </div>
+                      <p className="font-dm-sans text-sm font-semibold text-brand-black line-clamp-2 leading-snug">
+                        {p.name}
+                      </p>
+                      <p className="font-dm-sans text-lg font-bold text-brand-green">{p.commission_rate}%</p>
                     </Link>
-                    <ProductRequestButton />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {products.map((product) => (
-                    <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
               </section>
             )}
+
+            {/* 7. Success Guardian */}
+            {creator.account_manager_name && (
+              <section className="bg-white border border-gray-100 rounded-2xl p-5">
+                <p className="font-dm-sans text-xs font-bold uppercase tracking-widest text-brand-green mb-2">
+                  Tu Success Guardian
+                </p>
+                <p className="font-playfair text-2xl text-brand-black mb-3">{creator.account_manager_name}</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {creator.account_manager_whatsapp && (
+                    <a
+                      href={`https://wa.me/${creator.account_manager_whatsapp.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 inline-flex items-center justify-center gap-2 bg-brand-green text-white font-dm-sans text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-brand-green/90 transition"
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                      </svg>
+                      WhatsApp →
+                    </a>
+                  )}
+                  {bookingLink ? (
+                    <a
+                      href={bookingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 inline-flex items-center justify-center bg-brand-green text-white font-dm-sans text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-brand-green/90 transition"
+                    >
+                      Reserva tu llamada 1:1 →
+                    </a>
+                  ) : (
+                    <div className="flex-1 inline-flex items-center justify-center bg-amber-50 border border-amber-200 text-amber-700 font-dm-sans text-xs px-4 py-2.5 rounded-xl text-center">
+                      Tu link de agendamiento estará disponible pronto
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* 8. Community + Education small cards */}
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                href={whatsappCommunity}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-brand-pink/10 hover:bg-brand-pink/20 border border-brand-pink/30 rounded-2xl p-4 flex flex-col gap-2 transition group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-brand-pink/20 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-brand-black" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                  </svg>
+                </div>
+                <p className="font-dm-sans font-semibold text-sm text-brand-black">Comunidad</p>
+                <span className="font-dm-sans text-xs font-semibold text-brand-pink group-hover:underline mt-auto">
+                  Unirse al grupo →
+                </span>
+              </a>
+              <a
+                href={kajabiUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-brand-green/5 hover:bg-brand-green/10 border border-brand-green/20 rounded-2xl p-4 flex flex-col gap-2 transition group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-brand-green/10 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-brand-green" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                </div>
+                <p className="font-dm-sans font-semibold text-sm text-brand-black">Educación</p>
+                <span className="font-dm-sans text-xs font-semibold text-brand-green group-hover:underline mt-auto">
+                  Ver cursos →
+                </span>
+              </a>
+            </div>
           </>
         )}
       </main>

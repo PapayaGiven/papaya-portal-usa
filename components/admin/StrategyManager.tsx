@@ -65,6 +65,9 @@ export default function StrategyManager({ creators, products, campaigns, default
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isPending, startTransition] = useTransition()
+  // Target weeks for the explicit "copy week X to:" form. Mutually
+  // exclusive with selectedWeek — admin can't copy a week onto itself.
+  const [copyTargets, setCopyTargets] = useState<Record<number, boolean>>({})
 
   function setProductSearch(index: number, value: string) {
     setProductSearches((prev) => prev.map((v, i) => i === index ? value : v))
@@ -167,22 +170,22 @@ export default function StrategyManager({ creators, products, campaigns, default
   }
 
   /**
-   * Copies the current week's strategy products to the other three
-   * weeks. Asks for confirmation. If any target week already has rows,
-   * the second prompt picks replace vs. merge.
+   * Copies the current week's strategy products to the explicitly checked
+   * target weeks. Same replace-vs-merge prompt as before, but only for
+   * the subset the admin actually picked.
    */
-  function handleCopyToAllWeeks() {
+  function handleCopySelected() {
     if (!creatorId || !month) { fb('Error: Carga primero una estrategia.'); return }
     const monthDate = `${month}-01`
-    const targets = [1, 2, 3, 4].filter((w) => w !== selectedWeek)
+    const targets = [1, 2, 3, 4].filter((w) => w !== selectedWeek && copyTargets[w])
+    if (targets.length === 0) { fb('Elige al menos una semana destino.'); return }
+
     const ok = confirm(
-      `¿Copiar la estrategia de Semana ${selectedWeek} a las semanas ${targets.join(', ')}?`,
+      `¿Copiar la estrategia de Semana ${selectedWeek} a Semana ${targets.join(', ')}?`,
     )
     if (!ok) return
 
     startTransition(async () => {
-      // Look at what's already in the target weeks so we can ask
-      // replace-vs-merge only when it actually matters.
       const { counts, error } = await getStrategyWeekCounts(creatorId, monthDate)
       if (error) { fb(`Error: ${error}`); return }
       const occupied = targets.filter((w) => (counts?.[w] ?? 0) > 0)
@@ -201,7 +204,10 @@ export default function StrategyManager({ creators, products, campaigns, default
         mode,
       })
       if (result.error) fb(`Error: ${result.error}`)
-      else fb('Estrategia copiada a todas las semanas ✓')
+      else {
+        fb(`Estrategia copiada a Semana ${targets.join(', ')} ✓`)
+        setCopyTargets({})
+      }
     })
   }
 
@@ -282,19 +288,43 @@ export default function StrategyManager({ creators, products, campaigns, default
           </button>
         </div>
 
-        {/* Copy current week to weeks 2/3/4 — most common admin shortcut. */}
-        <div className="mt-4 flex items-center gap-3 flex-wrap">
+        {/* Pick which weeks to copy the current week into. The selected
+            source week is unselectable on purpose. */}
+        <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <span className="font-dm-sans text-sm font-semibold text-brand-black">
+            Copiar Semana {selectedWeek} a:
+          </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            {[1, 2, 3, 4].map((w) => {
+              const isSource = w === selectedWeek
+              const checked = !!copyTargets[w] && !isSource
+              return (
+                <label
+                  key={w}
+                  className={`inline-flex items-center gap-1.5 font-dm-sans text-sm ${
+                    isSource ? 'text-gray-300 cursor-not-allowed' : 'text-brand-black cursor-pointer'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={isSource}
+                    onChange={(e) => setCopyTargets((prev) => ({ ...prev, [w]: e.target.checked }))}
+                    className="w-4 h-4 accent-brand-pink"
+                  />
+                  Semana {w}
+                </label>
+              )
+            })}
+          </div>
           <button
             type="button"
-            disabled={!creatorId || !month || isPending}
-            onClick={handleCopyToAllWeeks}
+            disabled={!creatorId || !month || isPending || Object.values(copyTargets).every((v) => !v)}
+            onClick={handleCopySelected}
             className="font-dm-sans text-sm font-semibold bg-brand-pink text-white px-4 py-2 rounded-xl hover:bg-brand-pink/90 transition disabled:opacity-40"
           >
-            📋 Copiar a todas las semanas
+            📋 Copiar seleccionadas
           </button>
-          <p className="font-dm-sans text-xs text-gray-500">
-            Duplica los productos de Semana {selectedWeek} a las otras 3 semanas.
-          </p>
         </div>
       </div>
 
