@@ -237,7 +237,6 @@ function CreatorsTab({ creators, products, campaigns, creatorRewards, productReq
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState<'All' | CreatorLevel>('All')
   const [selectedId, setSelectedId] = useState<string | null>(creators[0]?.id ?? null)
-  const [subTab, setSubTab] = useState<'overview' | 'estrategia' | 'crecimiento' | 'todo' | 'calls' | 'recompensas' | 'solicitudes' | 'violations'>('overview')
   const [showAdd, setShowAdd] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', email: '' })
   const [generatedCode, setGeneratedCode] = useState<{ name: string; code: string } | null>(null)
@@ -430,85 +429,262 @@ function CreatorsTab({ creators, products, campaigns, creatorRewards, productReq
         )}
 
         {selected && (
-          <>
-            <div className="bg-white border border-gray-100 rounded-2xl mb-4 p-4 flex items-center gap-4 flex-wrap">
-              <div className="w-12 h-12 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-base flex items-center justify-center shrink-0">
-                {initials(selected.name, selected.email)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="font-playfair text-2xl text-brand-black leading-tight">{selected.name || '(sin nombre)'}</h2>
-                <p className="font-dm-sans text-xs text-gray-400 truncate">{selected.email}</p>
-              </div>
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${LEVEL_COLORS[selected.level]}`}>{selected.level}</span>
-              <span
-                title={
-                  selected.has_completed_onboarding
-                    ? 'Esta creadora ya configuró su cuenta.'
-                    : 'Esta creadora aún no ha configurado su cuenta. Comparte su código de acceso.'
-                }
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  selected.has_completed_onboarding
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'bg-amber-50 text-amber-800 border border-amber-200'
-                }`}
-              >
-                {selected.has_completed_onboarding ? '✓ Onboarding completado' : '⚠️ Sin cuenta'}
-              </span>
-            </div>
-
-            <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto">
-              {([
-                ['overview', 'Overview'],
-                ['estrategia', 'Estrategia'],
-                ['crecimiento', 'Crecimiento'],
-                ['todo', 'To Do'],
-                ['calls', 'Calls'],
-                ['recompensas', 'Recompensas'],
-                ['solicitudes', 'Solicitudes'],
-                ['violations', 'Violations'],
-              ] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  onClick={() => setSubTab(key)}
-                  className={`px-4 py-2 font-dm-sans text-sm font-medium whitespace-nowrap border-b-2 transition ${
-                    subTab === key
-                      ? 'border-brand-green text-brand-green'
-                      : 'border-transparent text-gray-500 hover:text-brand-black'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {subTab === 'overview' && (
-              <CreatorOverview creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} copyToClipboard={copyToClipboard} />
-            )}
-            {subTab === 'estrategia' && (
-              <StrategyManager creators={creators} products={products} campaigns={campaigns} defaultCreatorId={selected.id} hideCreatorPicker />
-            )}
-            {subTab === 'crecimiento' && (
-              <CreatorCrecimiento creator={selected} products={products} startTransition={startTransition} isPending={isPending} fb={fb} />
-            )}
-            {subTab === 'todo' && (
-              <CreatorTodo creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} />
-            )}
-            {subTab === 'calls' && (
-              <CreatorCalls creator={selected} startTransition={startTransition} isPending={isPending} fb={fb} />
-            )}
-            {subTab === 'recompensas' && (
-              <CreatorRewardsView creatorId={selected.id} creatorRewards={creatorRewards} />
-            )}
-            {subTab === 'solicitudes' && (
-              <CreatorRequestsView creatorId={selected.id} productRequests={productRequests} />
-            )}
-            {subTab === 'violations' && (
-              <CreatorViolationsView creatorId={selected.id} violations={violations} />
-            )}
-          </>
+          // key={selected.id} force-remounts CreatorProfile when the
+          // selected creator changes. This guarantees:
+          //  · CreatorOverview's form state (which seeds from props at
+          //    mount only) gets the new creator's values
+          //  · Every sub-tab's in-flight getCreatorAdminBundle gets
+          //    cancelled by its useEffect cleanup
+          //  · The lazy-mount cache (`opened` Set inside CreatorProfile)
+          //    resets so the new creator's tabs fetch fresh
+          //  · subTab resets to 'overview' instead of leaving the user
+          //    on someone else's Estrategia tab with stale data
+          <CreatorProfile
+            key={selected.id}
+            creator={selected}
+            creators={creators}
+            products={products}
+            campaigns={campaigns}
+            creatorRewards={creatorRewards}
+            productRequests={productRequests}
+            violations={violations}
+            startTransition={startTransition}
+            isPending={isPending}
+            fb={fb}
+            copyToClipboard={copyToClipboard}
+          />
         )}
       </section>
     </div>
+  )
+}
+
+/**
+ * Lightweight loading skeleton for the right-panel sub-tabs. Shown
+ * while the per-tab getCreatorAdminBundle fetch is in flight, so the
+ * user sees structural feedback instead of a "Cargando…" string after
+ * switching creators or first-opening a tab.
+ */
+function SubTabSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="space-y-3 py-2" aria-busy="true" aria-live="polite">
+      <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-3">
+        <div className="h-4 w-1/4 rounded bg-gray-100 animate-pulse" />
+        <div className="space-y-2">
+          {Array.from({ length: rows }).map((_, i) => (
+            <div
+              key={i}
+              className="h-3 rounded bg-gray-100 animate-pulse"
+              style={{ width: `${85 - i * 10}%` }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type CreatorSubTab =
+  | 'overview'
+  | 'estrategia'
+  | 'crecimiento'
+  | 'todo'
+  | 'calls'
+  | 'recompensas'
+  | 'solicitudes'
+  | 'violations'
+
+const CREATOR_SUBTABS: ReadonlyArray<readonly [CreatorSubTab, string]> = [
+  ['overview', 'Overview'],
+  ['estrategia', 'Estrategia'],
+  ['crecimiento', 'Crecimiento'],
+  ['todo', 'To Do'],
+  ['calls', 'Calls'],
+  ['recompensas', 'Recompensas'],
+  ['solicitudes', 'Solicitudes'],
+  ['violations', 'Violations'],
+]
+
+/**
+ * Right-hand creator profile. Lives in its own component so the parent
+ * can drive it with `key={creator.id}` — switching creator force-
+ * remounts everything, which resets the lazy-mount cache, cancels all
+ * in-flight fetches (via each sub-tab's useEffect cleanup) and clears
+ * the form state in CreatorOverview that initializes from props.
+ *
+ * Sub-tabs use a mount-on-first-visit + keep-mounted pattern. Once
+ * the user opens a tab it stays in the DOM (hidden via `hidden` attr)
+ * so its internal state caches across tab switches — no refetch when
+ * the user clicks back. The `opened` Set tracks which tabs have ever
+ * been visited so we never mount more than what's needed.
+ */
+function CreatorProfile({
+  creator,
+  creators,
+  products,
+  campaigns,
+  creatorRewards,
+  productRequests,
+  violations,
+  startTransition,
+  isPending,
+  fb,
+  copyToClipboard,
+}: {
+  creator: Creator
+  creators: Creator[]
+  products: Product[]
+  campaigns: Campaign[]
+  creatorRewards: CreatorRewardRow[]
+  productRequests: ProductRequestRow[]
+  violations: ViolationRow[]
+  startTransition: (cb: () => void) => void
+  isPending: boolean
+  fb: (msg: string) => void
+  copyToClipboard: (text: string, label: string) => void
+}) {
+  const [subTab, setSubTab] = useState<CreatorSubTab>('overview')
+  // Tracks which sub-tabs have ever been opened in this profile's
+  // lifetime. Once opened a tab stays mounted (hidden when inactive)
+  // so its data + form state cache. The Set is rebuilt on creator
+  // change via the parent's key prop, so caches don't leak across
+  // creators.
+  const [opened, setOpened] = useState<Set<CreatorSubTab>>(
+    () => new Set<CreatorSubTab>(['overview']),
+  )
+
+  const openTab = (key: CreatorSubTab) => {
+    setSubTab(key)
+    if (!opened.has(key)) {
+      setOpened((prev) => {
+        const next = new Set(prev)
+        next.add(key)
+        return next
+      })
+    }
+  }
+
+  return (
+    <>
+      <div className="bg-white border border-gray-100 rounded-2xl mb-4 p-4 flex items-center gap-4 flex-wrap">
+        <div className="w-12 h-12 rounded-full bg-brand-pink/20 text-brand-green font-dm-sans font-bold text-base flex items-center justify-center shrink-0">
+          {initials(creator.name, creator.email)}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-playfair text-2xl text-brand-black leading-tight">
+            {creator.name || '(sin nombre)'}
+          </h2>
+          <p className="font-dm-sans text-xs text-gray-400 truncate">{creator.email}</p>
+        </div>
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${LEVEL_COLORS[creator.level]}`}>
+          {creator.level}
+        </span>
+        <span
+          title={
+            creator.has_completed_onboarding
+              ? 'Esta creadora ya configuró su cuenta.'
+              : 'Esta creadora aún no ha configurado su cuenta. Comparte su código de acceso.'
+          }
+          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+            creator.has_completed_onboarding
+              ? 'bg-emerald-50 text-emerald-700'
+              : 'bg-amber-50 text-amber-800 border border-amber-200'
+          }`}
+        >
+          {creator.has_completed_onboarding ? '✓ Onboarding completado' : '⚠️ Sin cuenta'}
+        </span>
+      </div>
+
+      <div className="flex gap-1 border-b border-gray-100 mb-4 overflow-x-auto">
+        {CREATOR_SUBTABS.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => openTab(key)}
+            className={`px-4 py-2 font-dm-sans text-sm font-medium whitespace-nowrap border-b-2 transition ${
+              subTab === key
+                ? 'border-brand-green text-brand-green'
+                : 'border-transparent text-gray-500 hover:text-brand-black'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Lazy mount + keep-alive: each sub-tab renders only after the
+          user has visited it (`opened.has(key)`) and stays mounted
+          when inactive (`hidden={subTab !== key}`). React preserves
+          internal state across hides, so switching back to a tab
+          shows it instantly. */}
+      {opened.has('overview') && (
+        <div hidden={subTab !== 'overview'}>
+          <CreatorOverview
+            creator={creator}
+            startTransition={startTransition}
+            isPending={isPending}
+            fb={fb}
+            copyToClipboard={copyToClipboard}
+          />
+        </div>
+      )}
+      {opened.has('estrategia') && (
+        <div hidden={subTab !== 'estrategia'}>
+          <StrategyManager
+            creators={creators}
+            products={products}
+            campaigns={campaigns}
+            defaultCreatorId={creator.id}
+            hideCreatorPicker
+          />
+        </div>
+      )}
+      {opened.has('crecimiento') && (
+        <div hidden={subTab !== 'crecimiento'}>
+          <CreatorCrecimiento
+            creator={creator}
+            products={products}
+            startTransition={startTransition}
+            isPending={isPending}
+            fb={fb}
+          />
+        </div>
+      )}
+      {opened.has('todo') && (
+        <div hidden={subTab !== 'todo'}>
+          <CreatorTodo
+            creator={creator}
+            startTransition={startTransition}
+            isPending={isPending}
+            fb={fb}
+          />
+        </div>
+      )}
+      {opened.has('calls') && (
+        <div hidden={subTab !== 'calls'}>
+          <CreatorCalls
+            creator={creator}
+            startTransition={startTransition}
+            isPending={isPending}
+            fb={fb}
+          />
+        </div>
+      )}
+      {opened.has('recompensas') && (
+        <div hidden={subTab !== 'recompensas'}>
+          <CreatorRewardsView creatorId={creator.id} creatorRewards={creatorRewards} />
+        </div>
+      )}
+      {opened.has('solicitudes') && (
+        <div hidden={subTab !== 'solicitudes'}>
+          <CreatorRequestsView creatorId={creator.id} productRequests={productRequests} />
+        </div>
+      )}
+      {opened.has('violations') && (
+        <div hidden={subTab !== 'violations'}>
+          <CreatorViolationsView creatorId={creator.id} violations={violations} />
+        </div>
+      )}
+    </>
   )
 }
 
@@ -913,6 +1089,10 @@ function CreatorCrecimiento({ creator, products, startTransition, isPending, fb 
     }
   }
 
+  if (loading) {
+    return <SubTabSkeleton rows={6} />
+  }
+
   return (
     <div className="space-y-4">
       <div className="bg-white border border-gray-100 rounded-2xl p-5">
@@ -973,7 +1153,7 @@ function CreatorCrecimiento({ creator, products, startTransition, isPending, fb 
         )}
 
         {loading ? (
-          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+          <SubTabSkeleton />
         ) : stats.length === 0 ? (
           <p className="text-xs text-gray-400 py-4 text-center">Aún no hay stats. Agrega un mes para empezar.</p>
         ) : (
@@ -1161,7 +1341,7 @@ function CreatorTodo({ creator, startTransition, isPending, fb }: {
         )}
 
         {loading ? (
-          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+          <SubTabSkeleton />
         ) : items.length === 0 ? (
           <p className="text-xs text-gray-400 py-4 text-center">Sin entregas asignadas.</p>
         ) : (
@@ -1283,7 +1463,7 @@ function CreatorCalls({ creator, startTransition, isPending, fb }: {
         >Agregar nota</button>
 
         {loading ? (
-          <p className="text-xs text-gray-400 py-4 text-center">Cargando…</p>
+          <SubTabSkeleton />
         ) : notes.length === 0 ? (
           <p className="text-xs text-gray-400 py-4 text-center">Aún no hay notas de calls.</p>
         ) : (
