@@ -81,6 +81,11 @@ export default function StrategyManager({ creators, products, campaigns, default
   const [strategyProducts, setStrategyProducts] = useState<StrategyProductForm[]>([emptyProduct()])
   const [hashtagInputs, setHashtagInputs] = useState<string[]>([''])
   const [productSearches, setProductSearches] = useState<string[]>([''])
+  // Parallel to strategyProducts — true = card expanded. Kept in sync
+  // by every mutator (add/remove/move/load) so it doesn't drift. By
+  // default only the first product is expanded; newly added products
+  // open expanded so the admin can start editing immediately.
+  const [expanded, setExpanded] = useState<boolean[]>([true])
   const [feedback, setFeedback] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -260,6 +265,8 @@ export default function StrategyManager({ creators, products, campaigns, default
       if (!result.data) {
         setStrategyProducts([emptyProduct()])
         setHashtagInputs([''])
+        setProductSearches([''])
+        setExpanded([true])
         fb('No hay estrategia para este mes — Se creará una nueva.')
         return
       }
@@ -295,6 +302,9 @@ export default function StrategyManager({ creators, products, campaigns, default
       setStrategyProducts(finalProducts)
       setHashtagInputs(finalProducts.map((p) => p.hashtags.join(', ')))
       setProductSearches(finalProducts.map(() => ''))
+      // First card expanded by default so the admin sees something
+      // when the strategy lands, the rest collapsed for density.
+      setExpanded(finalProducts.map((_, i) => i === 0))
       fb(`✓ Estrategia cargada (${loaded.length} productos)`)
     })
   }
@@ -313,12 +323,46 @@ export default function StrategyManager({ creators, products, campaigns, default
     setStrategyProducts((prev) => [...prev, emptyProduct()])
     setHashtagInputs((prev) => [...prev, ''])
     setProductSearches((prev) => [...prev, ''])
+    // New cards start expanded — the admin just added it because
+    // they want to fill it in.
+    setExpanded((prev) => [...prev, true])
   }
 
   function removeProduct(index: number) {
     setStrategyProducts((prev) => prev.filter((_, i) => i !== index))
     setHashtagInputs((prev) => prev.filter((_, i) => i !== index))
     setProductSearches((prev) => prev.filter((_, i) => i !== index))
+    setExpanded((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  /**
+   * Swap a product with its neighbour above/below. We mutate all four
+   * parallel arrays in lockstep so positions stay aligned, then the
+   * autosave watch-effect picks up the strategyProducts change and
+   * schedules a save that persists the new order_index values.
+   */
+  function moveProduct(index: number, direction: -1 | 1) {
+    const target = index + direction
+    if (target < 0 || target >= strategyProducts.length) return
+    function swap<T>(arr: T[]): T[] {
+      const next = arr.slice()
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    }
+    setStrategyProducts((prev) => swap(prev))
+    setHashtagInputs((prev) => swap(prev))
+    setProductSearches((prev) => swap(prev))
+    setExpanded((prev) => swap(prev))
+  }
+
+  function toggleExpand(index: number) {
+    setExpanded((prev) => prev.map((v, i) => (i === index ? !v : v)))
+  }
+
+  const allExpanded = expanded.length > 0 && expanded.every(Boolean)
+  const allCollapsed = expanded.every((v) => !v)
+  function setAllExpanded(open: boolean) {
+    setExpanded((prev) => prev.map(() => open))
   }
 
   function addVideo(productIndex: number) {
@@ -535,14 +579,100 @@ export default function StrategyManager({ creators, products, campaigns, default
         </p>
       )}
 
+      {/* Products list controls */}
+      {strategyProducts.length > 1 && (
+        <div className="flex items-center justify-between mb-3">
+          <p className="font-dm-sans text-xs text-gray-400">
+            {strategyProducts.length} productos
+          </p>
+          <button
+            type="button"
+            onClick={() => setAllExpanded(!allExpanded)}
+            className="font-dm-sans text-xs font-semibold text-gray-500 hover:text-brand-black transition"
+          >
+            {allExpanded ? 'Colapsar todos' : allCollapsed ? 'Expandir todos' : 'Expandir todos'}
+          </button>
+        </div>
+      )}
+
       {/* Products */}
-      <div className="space-y-6">
-        {strategyProducts.map((sp, pi) => (
+      <div className="space-y-3">
+        {strategyProducts.map((sp, pi) => {
+          const isOpen = expanded[pi] ?? false
+          const productName = sp.is_external
+            ? (sp.external_product_name?.trim() || '(producto externo sin nombre)')
+            : (products.find((p) => p.id === sp.product_id)?.name || '(producto sin seleccionar)')
+          const isFirst = pi === 0
+          const isLast = pi === strategyProducts.length - 1
+          return (
           <div key={pi} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-            {/* Product header */}
-            <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
-              <span className="font-dm-sans font-semibold text-sm text-brand-black">Producto {pi + 1}</span>
+            {/* Product header — click anywhere on it (outside the
+                inner buttons) toggles collapse */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleExpand(pi)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(pi) }
+              }}
+              className="flex items-center justify-between gap-3 px-5 py-3 bg-gray-50 border-b border-gray-100 cursor-pointer hover:bg-gray-100/60 transition"
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <span aria-hidden className="font-dm-sans text-xs text-gray-400 w-3 shrink-0">
+                  {isOpen ? '▼' : '▶'}
+                </span>
+                <span className="font-dm-sans font-semibold text-sm text-brand-black shrink-0">
+                  Producto {pi + 1}
+                </span>
+                <span className="font-dm-sans text-sm text-gray-500 truncate">
+                  · {productName}
+                </span>
+                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${PRIORITY_COLORS[sp.priority as keyof typeof PRIORITY_COLORS] ?? PRIORITY_COLORS.Secondary}`}>
+                  {sp.priority}
+                </span>
+                {!isOpen && sp.videos_per_day != null && (
+                  <span className="font-dm-sans text-[11px] text-gray-500 shrink-0">
+                    {sp.videos_per_day} videos / {(sp.frequency_type ?? 'day') === 'week' ? 'sem' : 'día'}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  disabled={isFirst}
+                  onClick={() => moveProduct(pi, -1)}
+                  title="Subir"
+                  aria-label="Subir producto"
+                  className="text-gray-400 hover:text-brand-black disabled:opacity-30 disabled:hover:text-gray-400 px-1.5 py-1 rounded transition"
+                >↑</button>
+                <button
+                  type="button"
+                  disabled={isLast}
+                  onClick={() => moveProduct(pi, 1)}
+                  title="Bajar"
+                  aria-label="Bajar producto"
+                  className="text-gray-400 hover:text-brand-black disabled:opacity-30 disabled:hover:text-gray-400 px-1.5 py-1 rounded transition"
+                >↓</button>
+                {strategyProducts.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeProduct(pi)}
+                    title="Eliminar producto"
+                    className="text-xs text-red-400 hover:text-red-600 ml-1 px-1.5 py-1"
+                  >
+                    × Eliminar
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {isOpen && (
+            <div className="p-5 space-y-4">
+              {/* Priority — moved out of the header so the collapsed
+                  state can keep the header compact. Buttons act as a
+                  segmented control. */}
               <div className="flex items-center gap-2">
+                <span className="font-dm-sans text-xs text-gray-500 mr-1">Prioridad:</span>
                 {PRIORITIES.map((prio) => (
                   <button
                     key={prio}
@@ -553,15 +683,7 @@ export default function StrategyManager({ creators, products, campaigns, default
                     {prio}
                   </button>
                 ))}
-                {strategyProducts.length > 1 && (
-                  <button onClick={() => removeProduct(pi)} className="text-xs text-red-400 hover:text-red-600 ml-2">
-                    × Eliminar
-                  </button>
-                )}
               </div>
-            </div>
-
-            <div className="p-5 space-y-4">
               {/* External product toggle */}
               <label className="flex items-center gap-2 cursor-pointer">
                 <div
@@ -895,8 +1017,10 @@ export default function StrategyManager({ creators, products, campaigns, default
                 </div>
               </div>
             </div>
+            )}
           </div>
-        ))}
+          )
+        })}
       </div>
 
       <div className="flex items-center gap-3 mt-6">

@@ -681,6 +681,10 @@ export async function saveStrategy(data: {
     rows.push({
       strategy_id: strategy.id,
       week,
+      // Persist the position the admin gave us — rows.length at push
+      // time is the 0-based slot this row will occupy in the final
+      // payload, which matches what we just appended.
+      order_index: rows.length,
       product_id: isExternal ? null : (p.product_id || null),
       priority: p.priority,
       videos_per_day: p.videos_per_day,
@@ -816,7 +820,11 @@ export async function getStrategyForAdmin(
     .select('*, videos:strategy_videos(*)')
     .eq('strategy_id', strategy.id)
     .eq('week', week)
-    .order('created_at')
+    // Persisted reorder lives on order_index; created_at is the
+    // tiebreaker for legacy rows where the column was 0 before
+    // migration 019 backfilled them.
+    .order('order_index', { ascending: true })
+    .order('created_at', { ascending: true })
 
   if (pError) return { error: pError.message }
 
