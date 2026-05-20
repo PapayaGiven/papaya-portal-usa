@@ -611,6 +611,22 @@ export interface StrategyProductInput {
   external_link?: string
 }
 
+/**
+ * Serialize whatever `postgrest-js` hands us into a single grep-able
+ * string. We embed the PG `code` so admins can react to specific
+ * failure modes (e.g. PGRST204 = missing column in schema cache, 23505
+ * = unique constraint, 23502 = NOT NULL violation).
+ */
+function fmtPgError(scope: string, err: unknown): string {
+  const e = err as { code?: string; message?: string; details?: string; hint?: string } | null
+  if (!e) return `[saveStrategy:${scope}] unknown error`
+  const code = e.code ? `code=${e.code} ` : ''
+  const msg = e.message ?? ''
+  const det = e.details ? ` details=${e.details}` : ''
+  const hint = e.hint ? ` hint=${e.hint}` : ''
+  return `[saveStrategy:${scope}] ${code}${msg}${det}${hint}`
+}
+
 export async function saveStrategy(data: {
   creator_id: string
   month: string
@@ -622,6 +638,11 @@ export async function saveStrategy(data: {
 }): Promise<{ error?: string }> {
   const supabase = createAdminClient()
   const week = data.week ?? 1
+  const t0 = Date.now()
+
+  console.log(
+    `[saveStrategy:enter] creator=${data.creator_id} month=${data.month} week=${week} products_in=${data.products.length}`,
+  )
 
   const { data: strategy, error: stratError } = await supabase
     .from('strategies')
@@ -629,68 +650,144 @@ export async function saveStrategy(data: {
     .select('id')
     .single()
 
-  if (stratError) return { error: stratError.message }
+  if (stratError || !strategy) {
+    const e = fmtPgError('strategies.upsert', stratError)
+    console.error(e)
+    return { error: stratError?.message ?? 'strategies.upsert failed' }
+  }
 
-  // Replace only this week's products — weeks 2/3/4 stay intact.
-  await supabase.from('strategy_products').delete().eq('strategy_id', strategy.id).eq('week', week)
-
-  for (const p of data.products) {
+  // Build the insert payload BEFORE the delete so we can bail without
+  // wiping the week's rows when the input is malformed. The previous
+  // version deleted first and then failed mid-loop, which is exactly
+  // the "products disappear" symptom users were seeing.
+  const rows: Array<Record<string, unknown>> = []
+  // Parallel array — sourceIndices[i] is the index into data.products
+  // for rows[i]. We need it later to attach each inserted row's videos.
+  const sourceIndices: number[] = []
+  data.products.forEach((p, i) => {
     const isExternal = !!p.is_external
     const externalName = (p.external_product_name ?? '').trim()
+    if (!isExternal && !p.product_id) return
+    if (isExternal && !externalName) return
 
-    if (!isExternal && !p.product_id) continue
-    if (isExternal && !externalName) continue
-
-    const externalCommission =
-      p.external_commission == null || p.external_commission === ''
+    const ecRaw = p.external_commission
+    const ec =
+      ecRaw == null || ecRaw === ''
         ? null
-        : typeof p.external_commission === 'number'
-          ? p.external_commission
-          : Number(p.external_commission)
+        : typeof ecRaw === 'number'
+          ? ecRaw
+          : Number(ecRaw)
 
-    const { data: sp, error: spError } = await supabase
-      .from('strategy_products')
-      .insert({
-        strategy_id: strategy.id,
-        week,
-        product_id: isExternal ? null : (p.product_id || null),
-        priority: p.priority,
-        videos_per_day: p.videos_per_day,
-        frequency_type: p.frequency_type ?? 'day',
-        live_hours_per_week: p.live_hours_per_week,
-        gmv_target: p.gmv_target,
-        strategy_note: p.strategy_note,
-        hashtags: p.hashtags,
-        is_retainer: p.is_retainer,
-        campaign_id: isExternal ? null : (p.campaign_id || null),
-        brief_url: p.brief_url || null,
-        video_focus: p.video_focus || null,
-        quick_checklist: p.quick_checklist ?? [],
-        is_external: isExternal,
-        external_product_name: isExternal ? externalName : null,
-        external_brand: isExternal ? ((p.external_brand ?? '').trim() || null) : null,
-        external_commission: isExternal && externalCommission !== null && !Number.isNaN(externalCommission) ? externalCommission : null,
-        external_link: isExternal ? ((p.external_link ?? '').trim() || null) : null,
+    rows.push({
+      strategy_id: strategy.id,
+      week,
+      product_id: isExternal ? null : (p.product_id || null),
+      priority: p.priority,
+      videos_per_day: p.videos_per_day,
+      frequency_type: p.frequency_type ?? 'day',
+      live_hours_per_week: p.live_hours_per_week,
+      gmv_target: p.gmv_target,
+      strategy_note: p.strategy_note,
+      hashtags: p.hashtags,
+      is_retainer: p.is_retainer,
+      campaign_id: isExternal ? null : (p.campaign_id || null),
+      brief_url: p.brief_url || null,
+      video_focus: p.video_focus || null,
+      quick_checklist: p.quick_checklist ?? [],
+      is_external: isExternal,
+      external_product_name: isExternal ? externalName : null,
+      external_brand: isExternal ? ((p.external_brand ?? '').trim() || null) : null,
+      external_commission:
+        isExternal && ec !== null && !Number.isNaN(ec) ? ec : null,
+      external_link: isExternal ? ((p.external_link ?? '').trim() || null) : null,
+    })
+    sourceIndices.push(i)
+  })
+
+  console.log(`[saveStrategy:rows] eligible=${rows.length}`)
+
+  // Replace only this week's products — weeks 2/3/4 stay intact.
+  const { error: delError } = await supabase
+    .from('strategy_products')
+    .delete()
+    .eq('strategy_id', strategy.id)
+    .eq('week', week)
+  if (delError) {
+    console.error(fmtPgError('strategy_products.delete', delError))
+    return { error: delError.message }
+  }
+
+  if (rows.length === 0) {
+    console.log('[saveStrategy:done] cleared week (no eligible products)')
+    revalidatePath('/admin')
+    revalidatePath('/strategy')
+    return {}
+  }
+
+  // Single batched insert. Atomic at the table level, one round-trip,
+  // and (most importantly) if any column is missing or any row fails
+  // a constraint we get one error covering the whole batch instead of
+  // a partial state.
+  const { data: inserted, error: insError } = await supabase
+    .from('strategy_products')
+    .insert(rows)
+    .select('id')
+
+  if (insError) {
+    console.error(fmtPgError('strategy_products.insert', insError))
+    return { error: insError.message }
+  }
+  if (!inserted || inserted.length !== rows.length) {
+    const msg = `inserted ${inserted?.length ?? 0} rows but expected ${rows.length}`
+    console.error(`[saveStrategy:insert-mismatch] ${msg}`)
+    return { error: msg }
+  }
+
+  // Map inserted IDs back to the original products so we can attach
+  // their videos. supabase-js preserves payload order, so inserted[i]
+  // is the row we built at rows[i], whose source product lives at
+  // data.products[sourceIndices[i]].
+  const videoPayload: Array<{ strategy_product_id: string; video_url: string; thumbnail_url: string | null }> = []
+  for (let i = 0; i < rows.length; i++) {
+    const sourceProduct = data.products[sourceIndices[i]]
+    for (const v of sourceProduct.videos) {
+      const url = v.video_url.trim()
+      if (!url) continue
+      videoPayload.push({
+        strategy_product_id: inserted[i].id,
+        video_url: url,
+        thumbnail_url: v.thumbnail_url || null,
       })
-      .select('id')
-      .single()
-
-    if (spError) return { error: spError.message }
-
-    if (p.videos.length > 0) {
-      const videos = p.videos
-        .filter((v) => v.video_url.trim())
-        .map((v) => ({
-          strategy_product_id: sp.id,
-          video_url: v.video_url,
-          thumbnail_url: v.thumbnail_url || null,
-        }))
-      if (videos.length > 0) {
-        const { error: vError } = await supabase.from('strategy_videos').insert(videos)
-        if (vError) return { error: vError.message }
-      }
     }
   }
+  if (videoPayload.length > 0) {
+    const { error: vError } = await supabase.from('strategy_videos').insert(videoPayload)
+    if (vError) {
+      console.error(fmtPgError('strategy_videos.insert', vError))
+      return { error: vError.message }
+    }
+  }
+
+  // Read-back: confirm the rows we just wrote are actually visible
+  // before we tell the admin the save succeeded. A count mismatch
+  // here means something stripped rows between our insert and the
+  // next request — extremely unlikely, but worth surfacing.
+  const { count: writtenCount, error: rbError } = await supabase
+    .from('strategy_products')
+    .select('id', { count: 'exact', head: true })
+    .eq('strategy_id', strategy.id)
+    .eq('week', week)
+  if (rbError) {
+    console.error(fmtPgError('strategy_products.readback', rbError))
+  } else if ((writtenCount ?? 0) !== rows.length) {
+    console.error(
+      `[saveStrategy:readback-mismatch] expected ${rows.length} written=${writtenCount}`,
+    )
+  }
+
+  console.log(
+    `[saveStrategy:done] strategy=${strategy.id} week=${week} wrote=${rows.length} videos=${videoPayload.length} elapsed_ms=${Date.now() - t0}`,
+  )
 
   revalidatePath('/admin')
   revalidatePath('/strategy')
