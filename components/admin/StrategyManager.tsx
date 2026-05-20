@@ -1,8 +1,27 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { Creator, Product, Campaign } from '@/lib/types'
 import { saveStrategy, getStrategyForAdmin, copyStrategyWeek, getStrategyWeekCounts, StrategyProductInput, VideoInput } from '@/app/admin/actions'
+
+const AUTOSAVE_DEBOUNCE_MS = 3000
+type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error'
+
+/**
+ * Human-friendly relative time for the "Último guardado" subtitle.
+ * Kept inline (no date-fns dep) because it's the only place we need
+ * it and the locale is fixed.
+ */
+function formatRelativeTime(ts: Date | null, now: number): string | null {
+  if (!ts) return null
+  const seconds = Math.max(0, Math.floor((now - ts.getTime()) / 1000))
+  if (seconds < 5) return 'hace un momento'
+  if (seconds < 60) return `hace ${seconds} segundos`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `hace ${minutes} minuto${minutes === 1 ? '' : 's'}`
+  const hours = Math.floor(minutes / 60)
+  return `hace ${hours} hora${hours === 1 ? '' : 's'}`
+}
 
 interface StrategyManagerProps {
   creators: Creator[]
@@ -69,6 +88,148 @@ export default function StrategyManager({ creators, products, campaigns, default
   // exclusive with selectedWeek — admin can't copy a week onto itself.
   const [copyTargets, setCopyTargets] = useState<Record<number, boolean>>({})
 
+  // ── Autosave ────────────────────────────────────────────────────────
+  //
+  // Strategy: debounce 3s after the last edit to strategyProducts. The
+  // timer is reset on every change. Manual save + week switch cancel
+  // any pending timer (week switch because the form snapshot was edited
+  // against the previously-selected week and we don't want to flush it
+  // onto the new week's slot).
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle')
+  const [autosaveError, setAutosaveError] = useState<string | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [nowTick, setNowTick] = useState(() => Date.now())
+
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isMountedRef = useRef(true)
+  // Marks "there's at least one user edit that hasn't reached the
+  // server yet". Driven by the watch-effect below. Reset to false on
+  // successful saves (manual or auto) and on loadStrategy.
+  const dirtyRef = useRef(false)
+  // True from `loadStrategy` start until the resulting setState lands.
+  // The watch-effect uses this to skip the autosave-scheduling render
+  // that's caused by the load itself (not by a user edit).
+  const skipNextWatchRef = useRef(true)
+  // True when the admin changed creator/month/week but hasn't yet
+  // re-loaded. The current strategyProducts state is orphaned from
+  // the previous selection — autosaving it would silently write the
+  // wrong week's data onto the new slot. performAutoSave bails while
+  // this is true; a successful loadStrategy or manual save clears it.
+  const pendingSelectionLoadRef = useRef(false)
+  // Skip the very first run of the selection-change effect: at mount
+  // the initial creator/month/week were chosen by the parent, not by
+  // a user click, so they don't represent a "needs reload" state.
+  const initialMountRef = useRef(true)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [])
+
+  // Re-render every 15s so "hace X minutos" reflects elapsed time
+  // without keeping a per-keystroke ticker running.
+  useEffect(() => {
+    const id = setInterval(() => setNowTick(Date.now()), 15_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Warn before leaving the tab when there are unsaved/saving changes.
+  // We bind to beforeunload because the strategy editor lives inside
+  // the admin SPA — in-app navigation away from this view unmounts the
+  // component and the timer ref's cleanup discards the pending save.
+  useEffect(() => {
+    const hasUnsaved = dirtyRef.current || autosaveStatus === 'saving'
+    if (!hasUnsaved) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      const msg = 'Tienes cambios sin guardar. ¿Salir de todas formas?'
+      e.returnValue = msg
+      return msg
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [autosaveStatus, strategyProducts])
+
+  /**
+   * The save closure used by both the debounce timer and the manual
+   * save button. useCallback gives us a fresh closure when any of
+   * (creator, month, week, products) change so the save sees the
+   * latest values — no stale captures.
+   */
+  const performAutoSave = useCallback(async () => {
+    if (!creatorId || !month) return
+    // Selection changed but the user hasn't reloaded yet: the form
+    // belongs to the previous selection. Bail rather than dump it
+    // onto the new slot.
+    if (pendingSelectionLoadRef.current) return
+    if (!dirtyRef.current) return
+    setAutosaveStatus('saving')
+    setAutosaveError(null)
+    const monthDate = `${month}-01`
+    const result = await saveStrategy({
+      creator_id: creatorId,
+      month: monthDate,
+      week: selectedWeek,
+      products: strategyProducts,
+    })
+    if (!isMountedRef.current) return
+    if (result.error) {
+      setAutosaveStatus('error')
+      setAutosaveError(result.error)
+      return
+    }
+    dirtyRef.current = false
+    setLastSavedAt(new Date())
+    setAutosaveStatus('saved')
+  }, [creatorId, month, selectedWeek, strategyProducts])
+
+  // Mirror the latest performAutoSave into a ref so the watch-effect
+  // below can call the freshest version without listing it as a
+  // dependency. Avoids unnecessary effect re-runs when only creator/
+  // month/week change (no real form edit) which would otherwise mark
+  // the form dirty and schedule a save against the new selection.
+  const performAutoSaveRef = useRef(performAutoSave)
+  useEffect(() => {
+    performAutoSaveRef.current = performAutoSave
+  })
+
+  // Watch the form snapshot. Any real edit marks dirty + (re)schedules
+  // the debounced autosave. The first render after a load is a
+  // "synthetic" change (setStrategyProducts inside loadStrategy) so
+  // we gate it behind skipNextWatchRef.
+  useEffect(() => {
+    if (skipNextWatchRef.current) {
+      skipNextWatchRef.current = false
+      return
+    }
+    dirtyRef.current = true
+    setAutosaveStatus((prev) => (prev === 'saving' ? prev : 'idle'))
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    debounceTimerRef.current = setTimeout(() => {
+      performAutoSaveRef.current()
+    }, AUTOSAVE_DEBOUNCE_MS)
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    }
+  }, [strategyProducts])
+
+  // Selection changed (creator/month/week). The form is now orphaned
+  // from the new selection — kill any pending autosave and flag that
+  // the next save needs to be preceded by an explicit Cargar (or
+  // manual Save, which is explicit user intent).
+  useEffect(() => {
+    if (initialMountRef.current) {
+      initialMountRef.current = false
+      return
+    }
+    pendingSelectionLoadRef.current = true
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    setAutosaveStatus('idle')
+  }, [creatorId, month, selectedWeek])
+
   function setProductSearch(index: number, value: string) {
     setProductSearches((prev) => prev.map((v, i) => i === index ? value : v))
   }
@@ -81,6 +242,16 @@ export default function StrategyManager({ creators, products, campaigns, default
   function loadStrategy() {
     if (!creatorId || !month) return
     setLoading(true)
+    // Whatever's about to land on strategyProducts is "what the DB
+    // has" — not a user edit. Tell the watch-effect to skip the next
+    // run so we don't autosave it back. Also discard any pending
+    // autosave timer + dirty mark from the previous week.
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    dirtyRef.current = false
+    skipNextWatchRef.current = true
+    pendingSelectionLoadRef.current = false
+    setAutosaveStatus('idle')
+    setAutosaveError(null)
     const monthDate = `${month}-01`
     startTransition(async () => {
       const result = await getStrategyForAdmin(creatorId, monthDate, selectedWeek)
@@ -214,6 +385,11 @@ export default function StrategyManager({ creators, products, campaigns, default
   function handleSave() {
     if (!creatorId) { fb('Error: Selecciona una creadora.'); return }
     if (!month) { fb('Error: Selecciona un mes.'); return }
+    // Manual save overrides the pending autosave — kill the timer so
+    // we don't double-save 3s after this click.
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
+    setAutosaveStatus('saving')
+    setAutosaveError(null)
     startTransition(async () => {
       const monthDate = `${month}-01`
       const result = await saveStrategy({
@@ -222,15 +398,40 @@ export default function StrategyManager({ creators, products, campaigns, default
         week: selectedWeek,
         products: strategyProducts,
       })
-      if (result.error) fb(`Error: ${result.error}`)
-      else fb('¡Estrategia guardada!')
+      if (!isMountedRef.current) return
+      if (result.error) {
+        setAutosaveStatus('error')
+        setAutosaveError(result.error)
+        fb(`Error: ${result.error}`)
+        return
+      }
+      dirtyRef.current = false
+      // Manual save is also an explicit "I want THIS form against THIS
+      // selection committed" — clear the orphan guard.
+      pendingSelectionLoadRef.current = false
+      setLastSavedAt(new Date())
+      setAutosaveStatus('saved')
+      fb('¡Estrategia guardada!')
     })
   }
 
+  const relativeSaved = formatRelativeTime(lastSavedAt, nowTick)
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-dm-sans font-bold text-lg text-brand-black">Gestor de estrategias</h2>
+      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+          <h2 className="font-dm-sans font-bold text-lg text-brand-black">Gestor de estrategias</h2>
+          {relativeSaved && (
+            <p className="font-dm-sans text-xs text-gray-400 mt-0.5">
+              Último guardado: {relativeSaved}
+            </p>
+          )}
+        </div>
+        <AutosaveStatusPill
+          status={autosaveStatus}
+          error={autosaveError}
+        />
       </div>
 
       {/* Creator + Month selector */}
@@ -716,4 +917,59 @@ export default function StrategyManager({ creators, products, campaigns, default
       </div>
     </div>
   )
+}
+
+/**
+ * Small visual indicator in the top right of the strategy editor. The
+ * four states map to: idle (no recent activity), saving (in flight),
+ * saved (last action succeeded), error (last action failed — error
+ * message shown via title attribute so it stays out of the layout).
+ */
+function AutosaveStatusPill({
+  status,
+  error,
+}: {
+  status: AutosaveStatus
+  error: string | null
+}) {
+  if (status === 'saving') {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        className="inline-flex items-center gap-1.5 text-xs font-dm-sans font-medium bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
+      >
+        <span
+          aria-hidden
+          className="inline-block w-3 h-3 rounded-full border-2 border-gray-400 border-t-transparent animate-spin"
+        />
+        Guardando…
+      </span>
+    )
+  }
+  if (status === 'saved') {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        className="inline-flex items-center gap-1.5 text-xs font-dm-sans font-medium bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full"
+      >
+        ✓ Guardado
+      </span>
+    )
+  }
+  if (status === 'error') {
+    return (
+      <span
+        role="alert"
+        title={error ?? undefined}
+        className="inline-flex items-center gap-1.5 text-xs font-dm-sans font-medium bg-red-50 text-red-600 px-2.5 py-1 rounded-full max-w-[260px]"
+      >
+        ⚠ <span className="truncate">Error al guardar</span>
+      </span>
+    )
+  }
+  // idle — render an empty placeholder so the header layout doesn't
+  // jump when the pill appears/disappears.
+  return <span aria-hidden className="inline-block h-6" />
 }
